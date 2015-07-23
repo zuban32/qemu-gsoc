@@ -1184,7 +1184,7 @@ enum {
     CHECK_READY = 0x02,
 };
 
-static const struct {
+static const struct ATAPICommand {
     void (*handler)(IDEState *s, uint8_t *buf);
     int flags;
 } atapi_cmd_table[0x100] = {
@@ -1207,11 +1207,19 @@ static const struct {
     [ 0xbd ] = { cmd_mechanism_status,              0 },
     [ 0xbe ] = { cmd_read_cd,                       CHECK_READY },
     /* [1] handler detects and reports not ready condition itself */
+},
+bridge_cmd_table[0x100] = {
+    [0x12] = { inquiry_wrapper,                   ALLOW_UA }
 };
 
 void ide_atapi_cmd(IDEState *s)
 {
     uint8_t *buf;
+
+    const struct ATAPICommand *cmd_table =
+        (s->drive_kind == IDE_BRIDGE &&
+        bridge_cmd_table[s->io_buffer[0]].handler) ?
+            bridge_cmd_table : atapi_cmd_table;
 
     buf = s->io_buffer;
 #ifdef DEBUG_IDE_ATAPI
@@ -1231,7 +1239,7 @@ void ide_atapi_cmd(IDEState *s)
      * here, is pending.
      */
     if (s->sense_key == UNIT_ATTENTION &&
-        !(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA)) {
+        !(cmd_table[s->io_buffer[0]].flags & ALLOW_UA)) {
         ide_atapi_cmd_check_status(s);
         return;
     }
@@ -1242,7 +1250,7 @@ void ide_atapi_cmd(IDEState *s)
      * GET_EVENT_STATUS_NOTIFICATION to detect such tray open/close
      * states rely on this behavior.
      */
-    if (!(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
+    if (!(cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
         !s->tray_open && blk_is_inserted(s->blk) && s->cdrom_changed) {
 
         if (s->cdrom_changed == 1) {
@@ -1257,7 +1265,7 @@ void ide_atapi_cmd(IDEState *s)
     }
 
     /* Report a Not Ready condition if appropriate for the command */
-    if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
+    if ((cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
         (!media_present(s) || !blk_is_inserted(s->blk)))
     {
         ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
@@ -1265,8 +1273,8 @@ void ide_atapi_cmd(IDEState *s)
     }
 
     /* Execute the command */
-    if (atapi_cmd_table[s->io_buffer[0]].handler) {
-        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);
+    if (cmd_table[s->io_buffer[0]].handler) {
+        cmd_table[s->io_buffer[0]].handler(s, buf);
         return;
     }
 
