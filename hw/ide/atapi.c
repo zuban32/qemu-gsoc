@@ -635,6 +635,20 @@ static void cmd_request_sense(IDEState *s, uint8_t *buf)
     ide_atapi_cmd_reply(s, 18, max_len);
 }
 
+static void inquiry_wrapper(IDEState *s, uint8_t *buf)
+{
+    IDEDevice *dev = s->bus->master;
+    SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
+    SCSIRequest *req = scsi_req_new(scsi_dev, 0, 0, buf, NULL);
+
+    int max_len = scsi_disk_emulate_inquiry(req, buf);
+    int idx = 36;
+
+    ide_atapi_cmd_reply(s, idx, max_len);
+
+    return;
+}
+
 static void cmd_inquiry(IDEState *s, uint8_t *buf)
 {
     uint8_t page_code = buf[2];

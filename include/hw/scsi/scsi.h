@@ -278,4 +278,7 @@ SCSIDevice *scsi_device_find(SCSIBus *bus, int channel, int target, int lun);
 /* scsi-generic.c. */
 extern const SCSIReqOps scsi_generic_req_ops;
 
+/* For ide-bridge */
+int scsi_disk_emulate_inquiry(SCSIRequest *req, uint8_t *outbuf);
+
 #endif
