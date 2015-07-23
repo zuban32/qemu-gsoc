@@ -195,6 +195,12 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
         return -1;
     }
 
+    if (kind == IDE_BRIDGE) {
+        scsi_bus_new(&dev->scsi_bus, sizeof(dev->scsi_bus), &dev->qdev,
+                     &atapi_scsi_info, NULL);
+        scsi_bus_legacy_handle_cmdline(&dev->scsi_bus, NULL);
+    }
+
     if (!dev->version) {
         dev->version = g_strdup(s->version);
     }

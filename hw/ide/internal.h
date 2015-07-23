@@ -12,6 +12,7 @@
 #include "sysemu/sysemu.h"
 #include "hw/block/block.h"
 #include "block/scsi.h"
+#include "hw/scsi/scsi.h"
 
 /* debug IDE devices */
 //#define DEBUG_IDE
@@ -492,6 +493,7 @@ struct IDEDevice {
     char *serial;
     char *model;
     uint64_t wwn;
+    SCSIBus scsi_bus;
 };
 
 /* These are used for the error_status field of IDEBus */
