@@ -348,7 +348,7 @@ static void ide_set_signature(IDEState *s)
     /* put signature */
     s->nsector = 1;
     s->sector = 1;
-    if (s->drive_kind == IDE_CD) {
+    if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
         s->lcyl = 0x14;
         s->hcyl = 0xeb;
     } else if (s->blk) {
@@ -1144,7 +1144,7 @@ static bool cmd_data_set_management(IDEState *s, uint8_t cmd)
 
 static bool cmd_identify(IDEState *s, uint8_t cmd)
 {
-    if (s->blk && s->drive_kind != IDE_CD) {
+    if (s->blk && s->drive_kind != IDE_CD && s->drive_kind != IDE_BRIDGE) {
         if (s->drive_kind != IDE_CFATA) {
             ide_identify(s);
         } else {
@@ -1155,7 +1155,7 @@ static bool cmd_identify(IDEState *s, uint8_t cmd)
         ide_set_irq(s->bus);
         return false;
     } else {
-        if (s->drive_kind == IDE_CD) {
+        if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
             ide_set_signature(s);
         }
         ide_abort_command(s);
@@ -1232,7 +1232,7 @@ static bool cmd_read_pio(IDEState *s, uint8_t cmd)
 {
     bool lba48 = (cmd == WIN_READ_EXT);
 
-    if (s->drive_kind == IDE_CD) {
+    if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
         ide_set_signature(s); /* odd, but ATA4 8.27.5.2 requires it */
         ide_abort_command(s);
         return true;
@@ -1426,7 +1426,7 @@ static bool cmd_exec_dev_diagnostic(IDEState *s, uint8_t cmd)
 {
     ide_set_signature(s);
 
-    if (s->drive_kind == IDE_CD) {
+    if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
         s->status = 0; /* ATAPI spec (v6) section 9.10 defines packet
                         * devices to return a clear status register
                         * with READY_STAT *not* set. */
@@ -1731,7 +1731,7 @@ abort_cmd:
 }
 
 #define HD_OK (1u << IDE_HD)
-#define CD_OK (1u << IDE_CD)
+#define CD_OK ((1u << IDE_CD) | (1u << IDE_BRIDGE))
 #define CFA_OK (1u << IDE_CFATA)
 #define HD_CFA_OK (HD_OK | CFA_OK)
 #define ALL_OK (HD_OK | CD_OK | CFA_OK)
@@ -1978,10 +1978,11 @@ void ide_cmd_write(void *opaque, uint32_t addr, uint32_t val)
         /* high to low */
         for(i = 0;i < 2; i++) {
             s = &bus->ifs[i];
-            if (s->drive_kind == IDE_CD)
+            if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
                 s->status = 0x00; /* NOTE: READY is _not_ set */
-            else
+            } else {
                 s->status = READY_STAT | SEEK_STAT;
+            }
             ide_set_signature(s);
         }
     }
@@ -2210,7 +2211,7 @@ static void ide_resize_cb(void *opaque)
         ide_cfata_identify_size(s);
     } else {
         /* IDE_CD uses a different set of callbacks entirely. */
-        assert(s->drive_kind != IDE_CD);
+        assert(s->drive_kind != IDE_CD && s->drive_kind != IDE_BRIDGE);
         ide_identify_size(s);
     }
 }
@@ -2250,7 +2251,7 @@ int ide_init_drive(IDEState *s, BlockBackend *blk, IDEDriveKind kind,
     s->smart_autosave = 1;
     s->smart_errors = 0;
     s->smart_selftest_count = 0;
-    if (kind == IDE_CD) {
+    if (kind == IDE_CD || kind == IDE_BRIDGE) {
         blk_set_dev_ops(blk, &ide_cd_block_ops, s);
         blk_set_guest_block_size(blk, 2048);
     } else {
@@ -2279,6 +2280,9 @@ int ide_init_drive(IDEState *s, BlockBackend *blk, IDEDriveKind kind,
             break;
         case IDE_CFATA:
             strcpy(s->drive_model_str, "QEMU MICRODRIVE");
+            break;
+        case IDE_BRIDGE:
+            strcpy(s->drive_model_str, "QEMU ATAPI-SCSI bridge");
             break;
         default:
             strcpy(s->drive_model_str, "QEMU HARDDISK");
