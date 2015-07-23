@@ -28,6 +28,16 @@
 
 /* --------------------------------- */
 
+static const struct SCSIBusInfo atapi_scsi_info = {
+    .tcq = true,
+    .max_target = 0,
+    .max_lun = 0,
+
+    .transfer_data = NULL,
+    .complete = NULL,
+    .cancel = NULL
+};
+
 static char *idebus_get_fw_dev_path(DeviceState *dev);
 
 static Property ide_props[] = {
@@ -170,7 +180,7 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
     }
 
     blkconf_serial(&dev->conf, &dev->serial);
-    if (kind != IDE_CD) {
+    if (kind != IDE_CD && kind != IDE_BRIDGE) {
         blkconf_geometry(&dev->conf, &dev->chs_trans, 65536, 16, 255, &err);
         if (err) {
             error_report_err(err);
@@ -253,6 +263,11 @@ static int ide_cd_initfn(IDEDevice *dev)
     return ide_dev_initfn(dev, IDE_CD);
 }
 
+static int ide_bridge_initfn(IDEDevice *dev)
+{
+    return ide_dev_initfn(dev, IDE_BRIDGE);
+}
+
 static int ide_drive_initfn(IDEDevice *dev)
 {
     DriveInfo *dinfo = blk_legacy_dinfo(dev->conf.blk);
@@ -314,6 +329,23 @@ static const TypeInfo ide_cd_info = {
     .class_init    = ide_cd_class_init,
 };
 
+static void ide_bridge_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    IDEDeviceClass *k = IDE_DEVICE_CLASS(klass);
+    k->init = ide_bridge_initfn;
+    dc->fw_name = "drive";
+    dc->desc = "virtual ATAPI-SCSI bridge";
+    dc->props = ide_cd_properties;
+}
+
+static const TypeInfo ide_bridge_info = {
+    .name          = "ide-bridge",
+    .parent        = TYPE_IDE_DEVICE,
+    .instance_size = sizeof(IDEDrive),
+    .class_init    = ide_bridge_class_init,
+};
+
 static Property ide_drive_properties[] = {
     DEFINE_IDE_DEV_PROPERTIES(),
     DEFINE_PROP_END_OF_LIST(),
@@ -360,6 +392,7 @@ static void ide_register_types(void)
     type_register_static(&ide_bus_info);
     type_register_static(&ide_hd_info);
     type_register_static(&ide_cd_info);
+    type_register_static(&ide_bridge_info);
     type_register_static(&ide_drive_info);
     type_register_static(&ide_device_type_info);
 }

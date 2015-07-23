@@ -317,7 +317,7 @@ typedef struct IDEDMAOps IDEDMAOps;
 #define SMART_DISABLE         0xd9
 #define SMART_STATUS          0xda
 
-typedef enum { IDE_HD, IDE_CD, IDE_CFATA } IDEDriveKind;
+typedef enum { IDE_HD, IDE_CD, IDE_CFATA, IDE_BRIDGE } IDEDriveKind;
 
 typedef void EndTransferFunc(IDEState *);
 
