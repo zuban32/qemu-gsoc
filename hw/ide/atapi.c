@@ -635,19 +635,19 @@ static void cmd_request_sense(IDEState *s, uint8_t *buf)
     ide_atapi_cmd_reply(s, 18, max_len);
 }
 
-static void inquiry_wrapper(IDEState *s, uint8_t *buf)
-{
-    IDEDevice *dev = s->bus->master;
-    SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
-    SCSIRequest *req = scsi_req_new(scsi_dev, 0, 0, buf, NULL);
-
-    int max_len = scsi_disk_emulate_inquiry(req, buf);
-    int idx = 36;
-
-    ide_atapi_cmd_reply(s, idx, max_len);
-
-    return;
-}
+// static void inquiry_wrapper(IDEState *s, uint8_t *buf)
+// {
+//     IDEDevice *dev = s->bus->master;
+//     SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
+//     SCSIRequest *req = scsi_req_new(scsi_dev, 0, 0, buf, NULL);
+// 
+//     int max_len = scsi_disk_emulate_inquiry(req, buf);
+//     int idx = 36;
+// 
+//     ide_atapi_cmd_reply(s, idx, max_len);
+// 
+//     return;
+// }
 
 static void cmd_inquiry(IDEState *s, uint8_t *buf)
 {
@@ -1207,19 +1207,19 @@ static const struct ATAPICommand {
     [ 0xbd ] = { cmd_mechanism_status,              0 },
     [ 0xbe ] = { cmd_read_cd,                       CHECK_READY },
     /* [1] handler detects and reports not ready condition itself */
-},
+};/*,
 bridge_cmd_table[0x100] = {
     [0x12] = { inquiry_wrapper,                   ALLOW_UA }
-};
+};*/
 
 void ide_atapi_cmd(IDEState *s)
 {
     uint8_t *buf;
 
-    const struct ATAPICommand *cmd_table =
-        (s->drive_kind == IDE_BRIDGE &&
-        bridge_cmd_table[s->io_buffer[0]].handler) ?
-            bridge_cmd_table : atapi_cmd_table;
+//     const struct ATAPICommand *cmd_table =
+//         (s->drive_kind == IDE_BRIDGE &&
+//         bridge_cmd_table[s->io_buffer[0]].handler) ?
+//             bridge_cmd_table : atapi_cmd_table;
 
     buf = s->io_buffer;
 #ifdef DEBUG_IDE_ATAPI
@@ -1239,7 +1239,7 @@ void ide_atapi_cmd(IDEState *s)
      * here, is pending.
      */
     if (s->sense_key == UNIT_ATTENTION &&
-        !(cmd_table[s->io_buffer[0]].flags & ALLOW_UA)) {
+        !(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA)) {
         ide_atapi_cmd_check_status(s);
         return;
     }
@@ -1250,7 +1250,7 @@ void ide_atapi_cmd(IDEState *s)
      * GET_EVENT_STATUS_NOTIFICATION to detect such tray open/close
      * states rely on this behavior.
      */
-    if (!(cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
+    if (!(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
         !s->tray_open && blk_is_inserted(s->blk) && s->cdrom_changed) {
 
         if (s->cdrom_changed == 1) {
@@ -1265,16 +1265,25 @@ void ide_atapi_cmd(IDEState *s)
     }
 
     /* Report a Not Ready condition if appropriate for the command */
-    if ((cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
+    if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
         (!media_present(s) || !blk_is_inserted(s->blk)))
     {
         ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
         return;
     }
-
+    
+    if(s->drive_kind == IDE_BRIDGE)
+    {
+        IDEDevice *dev = s->bus->master;
+        SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
+        SCSIRequest *req = scsi_req_new(scsi_dev, 0, 0, buf, NULL);
+        if(scsi_req_enqueue(req)) scsi_req_continue(req);
+        return;
+    }
+    
     /* Execute the command */
-    if (cmd_table[s->io_buffer[0]].handler) {
-        cmd_table[s->io_buffer[0]].handler(s, buf);
+    if (atapi_cmd_table[s->io_buffer[0]].handler) {
+        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);
         return;
     }
 

@@ -28,13 +28,64 @@
 
 /* --------------------------------- */
 
+
+static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
+{
+//     IDEState *s = IDE_BRIDGE(req->bus->qbus.parent);
+    IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
+    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+    IDEState *s = bus->ifs;
+    
+    s->lba = -1; /* no sector read */
+    s->packet_transfer_size = len;
+    s->io_buffer_size = len;    /* dma: send the reply data as one chunk */
+    s->elementary_transfer_size = 0;
+    
+    s->status = READY_STAT | SEEK_STAT;
+    s->io_buffer_index = 0;
+    ide_atapi_cmd_reply_end(s);
+}
+
+static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
+{
+    scsi_req_unref(req);
+    
+    IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
+    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+    IDEState *s = bus->ifs;
+    
+    ide_atapi_cmd_ok(s);
+//     IDEState *s = IDE_BRIDGE(req->bus->qbus.parent);
+//     IDEState *s = LSI53C895A(req->bus->qbus.parent);
+//     int out;
+//     
+//     out = (s->sstat1 & PHASE_MASK) == PHASE_DO;
+//     DPRINTF("Command complete status=%d\n", (int)status);
+//     s->status = status;
+//     s->command_complete = 2;
+//     if (s->waiting && s->dbc != 0) {
+//         /* Raise phase mismatch for short transfers.  */
+//         lsi_bad_phase(s, out, PHASE_ST);
+//     } else {
+//         lsi_set_phase(s, PHASE_ST);
+//     }
+//     
+//     if (req->hba_private == s->current) {
+//         req->hba_private = NULL;
+//         lsi_request_free(s, s->current);
+//         scsi_req_unref(req);
+//     }
+//     lsi_resume_script(s);
+//     ide_atapi_cmd_ok(s);
+}
+
 static const struct SCSIBusInfo atapi_scsi_info = {
     .tcq = true,
     .max_target = 0,
     .max_lun = 0,
-
-    .transfer_data = NULL,
-    .complete = NULL,
+    
+    .transfer_data = ide_bridge_transfer,
+    .complete = ide_bridge_complete,
     .cancel = NULL
 };
 
