@@ -113,6 +113,7 @@ static int cd_read_sector(IDEState *s, int lba, uint8_t *buf, int sector_size)
     case 2048:
         block_acct_start(blk_get_stats(s->blk), &s->acct,
                          4 * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
+        fprintf(stderr, "blk_read: sect = %ld, sct_num = %d\n", (int64_t)lba << 2, 4);
         ret = blk_read(s->blk, (int64_t)lba << 2, buf, 4);
         block_acct_done(blk_get_stats(s->blk), &s->acct);
         break;
@@ -134,6 +135,8 @@ static int cd_read_sector(IDEState *s, int lba, uint8_t *buf, int sector_size)
 
 void ide_atapi_cmd_ok(IDEState *s)
 {
+    fprintf(stderr, "cmd_ok\n");
+    
     s->error = 0;
     s->status = READY_STAT | SEEK_STAT;
     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
@@ -276,6 +279,11 @@ static void ide_atapi_cmd_read_pio(IDEState *s, int lba, int nb_sectors,
     s->cd_sector_size = sector_size;
 
     s->status = READY_STAT | SEEK_STAT;
+    
+    fprintf(stderr, "ide-bridge transfer: lba = %d, pck_size = %d, el_size = %d, index = %d, sect_size = %d\n",
+        s->lba, s->packet_transfer_size, s->elementary_transfer_size, s->io_buffer_index, s->cd_sector_size
+    );
+    
     ide_atapi_cmd_reply_end(s);
 }
 
@@ -1232,6 +1240,8 @@ void ide_atapi_cmd(IDEState *s)
         printf("\n");
     }
 #endif
+
+    fprintf(stderr, "ATAPI: buf[0] = 0x%x\n", buf[0]);
     /*
      * If there's a UNIT_ATTENTION condition pending, only command flagged with
      * ALLOW_UA are allowed to complete. with other commands getting a CHECK
@@ -1273,10 +1283,10 @@ void ide_atapi_cmd(IDEState *s)
     }
     
     if(s->drive_kind == IDE_BRIDGE)
-    {
+    {   
         IDEDevice *dev = s->bus->master;
         SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
-        SCSIRequest *req = scsi_req_new(scsi_dev, 0, 0, buf, NULL);
+        SCSIRequest *req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
         if(scsi_req_enqueue(req)) scsi_req_continue(req);
         return;
     }

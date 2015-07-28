@@ -28,6 +28,15 @@
 
 /* --------------------------------- */
 
+static inline int ube16_to_cpu(const uint8_t *buf)
+{
+    return (buf[0] << 8) | buf[1];
+}
+
+static inline int ube32_to_cpu(const uint8_t *buf)
+{
+    return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+}
 
 static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
 {
@@ -35,15 +44,24 @@ static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
     IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
     IDEState *s = bus->ifs;
+     
+    int nb_sectors, lba;
+    nb_sectors = ube16_to_cpu(req->cmd.buf + 7);
+    lba = ube32_to_cpu(req->cmd.buf + 2);
     
-    s->lba = -1; /* no sector read */
-    s->packet_transfer_size = len;
-    s->io_buffer_size = len;    /* dma: send the reply data as one chunk */
+    s->lba = lba;
+    s->packet_transfer_size = nb_sectors * 2048;
     s->elementary_transfer_size = 0;
+    s->io_buffer_index = 2048;
+    s->cd_sector_size = 2048;
     
     s->status = READY_STAT | SEEK_STAT;
-    s->io_buffer_index = 0;
-    ide_atapi_cmd_reply_end(s);
+    
+//     fprintf(stderr, "ide-bridge transfer: lba = %d, pck_size = %d, el_size = %d, index = %d, sect_size = %d\n",
+//         s->lba, s->packet_transfer_size, s->elementary_transfer_size, s->io_buffer_index, s->cd_sector_size
+//     );
+    
+    ide_atapi_cmd_ok(s);
 }
 
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)

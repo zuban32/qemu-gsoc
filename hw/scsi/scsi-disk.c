@@ -339,8 +339,10 @@ static void scsi_do_read(void *opaque, int ret)
                                     scsi_dma_complete, r);
     } else {
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
+        fprintf(stderr, "n = %d\n", n);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
                          n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
+        fprintf(stderr, "blk_read: sect = %lu, sct_num = %d\n", r->sector, n);
         r->req.aiocb = blk_aio_readv(s->qdev.conf.blk, r->sector, &r->qiov, n,
                                      scsi_read_complete, r);
     }
@@ -1786,6 +1788,7 @@ static void scsi_disk_emulate_write_data(SCSIRequest *req)
 
 static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
 {
+    fprintf(stderr, "disk command: 0x%x\n", buf[0]);
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, req->dev);
     uint64_t nb_sectors;
@@ -1811,6 +1814,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     default:
         if (s->tray_open || !blk_is_inserted(s->qdev.conf.blk)) {
             scsi_check_condition(r, SENSE_CODE(NO_MEDIUM));
+//             fprintf(stderr, "no medium\n")
             return 0;
         }
         break;
@@ -1839,6 +1843,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     switch (req->cmd.buf[0]) {
     case TEST_UNIT_READY:
         assert(!s->tray_open && blk_is_inserted(s->qdev.conf.blk));
+        fprintf(stderr, "SCSI: test unit ready\n");
         break;
     case INQUIRY:
         buflen = scsi_disk_emulate_inquiry(req, outbuf);
@@ -2042,6 +2047,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     }
     assert(!r->req.aiocb);
     r->iov.iov_len = MIN(r->buflen, req->cmd.xfer);
+    fprintf(stderr, "iov_len = %u\n", (unsigned)r->iov.iov_len);
     if (r->iov.iov_len == 0) {
         scsi_req_complete(&r->req, GOOD);
     }
@@ -2070,6 +2076,7 @@ illegal_lba:
 
 static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
 {
+    fprintf(stderr, "dma command: 0x%x\n", buf[0]);
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, req->dev);
     uint32_t len;
@@ -2397,20 +2404,33 @@ static const SCSIReqOps *const scsi_disk_reqops_dispatch[256] = {
     [WRITE_VERIFY_16]                 = &scsi_disk_dma_reqops,
 };
 
-static SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
+SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
                                      uint8_t *buf, void *hba_private)
 {
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, d);
+    SCSIDeviceClass *sc = SCSI_DEVICE_GET_CLASS(d);
     SCSIRequest *req;
     const SCSIReqOps *ops;
     uint8_t command;
 
     command = buf[0];
+    fprintf(stderr, "Command = 0x%x\n", command);
     ops = scsi_disk_reqops_dispatch[command];
     if (!ops) {
         ops = &scsi_disk_emulate_reqops;
     }
     req = scsi_req_alloc(ops, &s->qdev, tag, lun, hba_private);
+    memcpy(req->cmd.buf, buf, 16);
+    
+    SCSICommand cmd = { .len = 0 };
+    
+    if (ops != NULL || !sc->parse_cdb) {
+        scsi_req_parse_cdb(d, &cmd, buf);
+    } else {
+        sc->parse_cdb(d, &cmd, buf, hba_private);
+    }
+    
+    req->cmd = cmd;
 
 #ifdef DEBUG_SCSI
     DPRINTF("Command: lun=%d tag=0x%x data=0x%02x", lun, tag, buf[0]);
