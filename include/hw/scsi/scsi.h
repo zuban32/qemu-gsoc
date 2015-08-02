@@ -120,6 +120,20 @@ extern const VMStateDescription vmstate_scsi_device;
     .offset     = vmstate_offset_value(_state, _field, SCSIDevice),  \
 }
 
+#include "block/accounting.h"
+
+typedef struct SCSIDiskReq {
+    SCSIRequest req;
+    /* Both sector and sector_count are in terms of qemu 512 byte blocks.  */
+    uint64_t sector;
+    uint32_t sector_count;
+    uint32_t buflen;
+    bool started;
+    struct iovec iov;
+    QEMUIOVector qiov;
+    BlockAcctCookie acct;
+} SCSIDiskReq;
+
 /* cdrom.c */
 int cdrom_read_toc(int nb_sectors, uint8_t *buf, int msf, int start_track);
 int cdrom_read_toc_raw(int nb_sectors, uint8_t *buf, int msf, int session_num);

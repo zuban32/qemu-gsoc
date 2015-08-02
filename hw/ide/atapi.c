@@ -1282,18 +1282,31 @@ void ide_atapi_cmd(IDEState *s)
         return;
     }
     
+    int cmd = buf[0];
+    
     if(s->drive_kind == IDE_BRIDGE)
     {   
         IDEDevice *dev = s->bus->master;
         SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
         SCSIRequest *req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
         if(scsi_req_enqueue(req)) scsi_req_continue(req);
+        
+        if(cmd == 0x28)
+        {
+            SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
+            qemu_iovec_to_buf(&r->qiov, 0, buf, 2048);
+            printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
+        }
+        
         return;
     }
     
     /* Execute the command */
     if (atapi_cmd_table[s->io_buffer[0]].handler) {
-        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);
+        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);    
+        if(cmd == 0x28)
+        printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
+
         return;
     }
 

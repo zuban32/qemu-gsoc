@@ -53,18 +53,6 @@ do { printf("scsi-disk: " fmt , ## __VA_ARGS__); } while (0)
 
 typedef struct SCSIDiskState SCSIDiskState;
 
-typedef struct SCSIDiskReq {
-    SCSIRequest req;
-    /* Both sector and sector_count are in terms of qemu 512 byte blocks.  */
-    uint64_t sector;
-    uint32_t sector_count;
-    uint32_t buflen;
-    bool started;
-    struct iovec iov;
-    QEMUIOVector qiov;
-    BlockAcctCookie acct;
-} SCSIDiskReq;
-
 #define SCSI_DISK_F_REMOVABLE             0
 #define SCSI_DISK_F_DPOFUA                1
 #define SCSI_DISK_F_NO_REMOVABLE_DEVOPS   2
@@ -295,6 +283,7 @@ static void scsi_read_complete(void * opaque, int ret)
             goto done;
         }
     }
+    printf("qiov.size = %u\n", (unsigned)r->qiov.size);
 
     DPRINTF("Data ready tag=0x%x len=%zd\n", r->req.tag, r->qiov.size);
 
@@ -2431,6 +2420,7 @@ SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
     }
     
     req->cmd = cmd;
+    req->resid = req->cmd.xfer;
 
 #ifdef DEBUG_SCSI
     DPRINTF("Command: lun=%d tag=0x%x data=0x%02x", lun, tag, buf[0]);
