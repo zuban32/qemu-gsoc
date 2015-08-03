@@ -269,6 +269,12 @@ static void scsi_read_complete(void * opaque, int ret)
     SCSIDiskReq *r = (SCSIDiskReq *)opaque;
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
     int n;
+    
+    uint8_t *buf = r->qiov.iov->iov_base;
+    printf("buf = 0x%lx\n", (unsigned long)buf);
+    int off = 0;
+    
+    printf("scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
     assert(r->req.aiocb != NULL);
     r->req.aiocb = NULL;
@@ -291,6 +297,8 @@ static void scsi_read_complete(void * opaque, int ret)
     r->sector += n;
     r->sector_count -= n;
     scsi_req_data(&r->req, r->qiov.size);
+    printf("scsi1 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+
 
 done:
     scsi_req_unref(&r->req);

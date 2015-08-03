@@ -1295,7 +1295,15 @@ void ide_atapi_cmd(IDEState *s)
         {
             SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
             qemu_iovec_to_buf(&r->qiov, 0, buf, 2048);
-            printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
+            buf = (uint8_t *)r->qiov.iov->iov_base;
+            printf("buf = 0x%lx\n", (unsigned long)buf);        // MAGICAL STRING!
+            int off = 0;
+//             while(buf[0 + off] != 0 || buf[1 + off] != 0x43 || buf[2 + off] != 0x44 || buf[3 + off] != 0x30)
+//             {
+//                 off++;//, printf("off = %d\n", off);
+            
+            printf("atapi: read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+//             }
         }
         
         return;
