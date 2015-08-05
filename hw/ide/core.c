@@ -468,6 +468,7 @@ static inline void ide_abort_command(IDEState *s)
 void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
                         EndTransferFunc *end_transfer_func)
 {
+    fprintf(stderr, "transfer_start\n");
     s->end_transfer_func = end_transfer_func;
     s->data_ptr = buf;
     s->data_end = buf + size;
@@ -492,6 +493,11 @@ void ide_transfer_stop(IDEState *s)
     s->data_ptr = s->io_buffer;
     s->data_end = s->io_buffer;
     s->status &= ~DRQ_STAT;
+    fprintf(stderr, "transfer_stop\n");
+    int off = 4 * 0;
+    for(off = 0; off < (2048 / 4) - 1; off += 4)
+    fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0 + off],
+            s->io_buffer[1 + off],s->io_buffer[2 + off],s->io_buffer[3 + off]);
     ide_cmd_done(s);
 }
 
@@ -1454,6 +1460,8 @@ static bool cmd_device_reset(IDEState *s, uint8_t cmd)
 
 static bool cmd_packet(IDEState *s, uint8_t cmd)
 {
+    fprintf(stderr, "cmd_packet: 0x%x\n", cmd);
+    fprintf(stderr, "s->feature = %d\n", s->feature & 1);
     /* overlapping commands not supported */
     if (s->feature & 0x02) {
         ide_abort_command(s);
@@ -1465,6 +1473,8 @@ static bool cmd_packet(IDEState *s, uint8_t cmd)
     s->nsector = 1;
     ide_transfer_start(s, s->io_buffer, ATAPI_PACKET_SIZE,
                        ide_atapi_cmd);
+    fprintf(stderr, "cmd_packet_end: 0x%x\n", cmd);
+    fprintf(stderr, "s->feature = %d\n", s->feature & 1);
     return false;
 }
 
@@ -1839,6 +1849,8 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
     s->io_buffer_offset = 0;
 
     complete = ide_cmd_table[val].handler(s, val);
+    fprintf(stderr, "complete = %d\n", complete);
+//     fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0],s->io_buffer[1],s->io_buffer[2],s->io_buffer[3]);
     if (complete) {
         s->status &= ~BUSY_STAT;
         assert(!!s->error == !!(s->status & ERR_STAT));
@@ -1849,6 +1861,7 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
 
         ide_cmd_done(s);
         ide_set_irq(s->bus);
+        
     }
 }
 

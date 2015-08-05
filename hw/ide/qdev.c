@@ -40,39 +40,76 @@ static inline int ube32_to_cpu(const uint8_t *buf)
 
 static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
 {
+    fprintf(stderr, "bridge transfer\n");
 //     IDEState *s = IDE_BRIDGE(req->bus->qbus.parent);
-    IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
-    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
-    IDEState *s = bus->ifs;
-     
-    int nb_sectors, lba;
-    nb_sectors = ube16_to_cpu(req->cmd.buf + 7);
-    lba = ube32_to_cpu(req->cmd.buf + 2);
-    
-    s->lba = lba;
-    s->packet_transfer_size = nb_sectors * 2048;
-    s->elementary_transfer_size = 0;
-    s->io_buffer_index = 2048;
-    s->cd_sector_size = 2048;
-    
-    s->status = READY_STAT | SEEK_STAT;
+//     IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
+//     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+//     IDEState *s = bus->ifs;
+//      
+//     int nb_sectors, lba;
+//     nb_sectors = ube16_to_cpu(req->cmd.buf + 7);
+//     lba = ube32_to_cpu(req->cmd.buf + 2);
+//     
+//     s->lba = lba;
+//     s->packet_transfer_size = nb_sectors * 2048;
+//     s->elementary_transfer_size = 0;
+//     s->io_buffer_index = 2048;
+//     s->cd_sector_size = 2048;
+//     
+//     s->status = READY_STAT | SEEK_STAT;
     
 //     fprintf(stderr, "ide-bridge transfer: lba = %d, pck_size = %d, el_size = %d, index = %d, sect_size = %d\n",
 //         s->lba, s->packet_transfer_size, s->elementary_transfer_size, s->io_buffer_index, s->cd_sector_size
 //     );
     
-    ide_atapi_cmd_ok(s);
+//     ide_atapi_cmd_ok(s);
 }
 
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
+    fprintf(stderr, "bridge_complete\n");
     scsi_req_unref(req);
     
     IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
-    IDEState *s = bus->ifs;
+    IDEState *s = bus->ifs;  
+    SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     
+    int byte_count_limit, size = 2048;
+   s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
+            byte_count_limit = s->lcyl | (s->hcyl << 8);
+            if (byte_count_limit == 0xffff)
+                byte_count_limit--;
+//             fprintf(stderr, "atapi: size = %d\n", s->packet_transfer_size);
+//             size = s->packet_transfer_size;
+            if (size > byte_count_limit) {
+                /* byte count limit must be even if this case */
+                if (byte_count_limit & 1)
+                    byte_count_limit--;
+                size = byte_count_limit;
+            }
+            s->lcyl = size;
+            s->hcyl = size >> 8;
+            s->elementary_transfer_size = size;
+            /* we cannot transmit more than one sector at a time */
+            if (s->lba != -1) {
+                if (size > (s->cd_sector_size - s->io_buffer_index))
+                    size = (s->cd_sector_size - s->io_buffer_index);
+            }
+            s->packet_transfer_size -= size;
+            s->elementary_transfer_size -= size;
+            s->io_buffer_index += size;
+            
+            if(req->cmd.buf[0] == 0x28)
+            qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    
+//     if(req->cmd.buf[0] != 0x28)
     ide_atapi_cmd_ok(s);
+    if(req->cmd.buf[0] == 0x28)
+    ide_set_irq(bus);
+    
+//     ide_atapi_cmd_ok(s);
+//         ide_set_irq(s->bus);
 //     IDEState *s = IDE_BRIDGE(req->bus->qbus.parent);
 //     IDEState *s = LSI53C895A(req->bus->qbus.parent);
 //     int out;

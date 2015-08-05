@@ -174,12 +174,12 @@ void ide_atapi_io_error(IDEState *s, int ret)
 void ide_atapi_cmd_reply_end(IDEState *s)
 {
     int byte_count_limit, size, ret;
-#ifdef DEBUG_IDE_ATAPI
-    printf("reply: tx_size=%d elem_tx_size=%d index=%d\n",
+// #ifdef DEBUG_IDE_ATAPI
+    fprintf(stderr, "reply: tx_size=%d elem_tx_size=%d index=%d\n",
            s->packet_transfer_size,
            s->elementary_transfer_size,
            s->io_buffer_index);
-#endif
+// #endif
     if (s->packet_transfer_size <= 0) {
         /* end of transfer */
         ide_atapi_cmd_ok(s);
@@ -1290,22 +1290,6 @@ void ide_atapi_cmd(IDEState *s)
         SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
         SCSIRequest *req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
         if(scsi_req_enqueue(req)) scsi_req_continue(req);
-        
-        if(cmd == 0x28)
-        {
-            SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
-            qemu_iovec_to_buf(&r->qiov, 0, buf, 2048);
-            buf = (uint8_t *)r->qiov.iov->iov_base;
-            printf("buf = 0x%lx\n", (unsigned long)buf);        // MAGICAL STRING!
-            int off = 0;
-//             while(buf[0 + off] != 0 || buf[1 + off] != 0x43 || buf[2 + off] != 0x44 || buf[3 + off] != 0x30)
-//             {
-//                 off++;//, printf("off = %d\n", off);
-            
-            printf("atapi: read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
-//             }
-        }
-        
         return;
     }
     
@@ -1313,7 +1297,7 @@ void ide_atapi_cmd(IDEState *s)
     if (atapi_cmd_table[s->io_buffer[0]].handler) {
         atapi_cmd_table[s->io_buffer[0]].handler(s, buf);    
         if(cmd == 0x28)
-        printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
+            printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
 
         return;
     }

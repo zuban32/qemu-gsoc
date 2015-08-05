@@ -1654,7 +1654,7 @@ void scsi_req_data(SCSIRequest *req, int len)
     assert(req->cmd.mode != SCSI_XFER_NONE);
     if (!req->sg) {
         req->resid -= len;
-        req->bus->info->transfer_data(req, len);
+//         req->bus->info->transfer_data(req, len);
         return;
     }
 

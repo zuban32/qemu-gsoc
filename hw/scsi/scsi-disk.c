@@ -271,10 +271,10 @@ static void scsi_read_complete(void * opaque, int ret)
     int n;
     
     uint8_t *buf = r->qiov.iov->iov_base;
-    printf("buf = 0x%lx\n", (unsigned long)buf);
+    fprintf(stderr, "buf = 0x%lx\n", (unsigned long)buf);
     int off = 0;
     
-    printf("scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+    fprintf(stderr, "scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
     assert(r->req.aiocb != NULL);
     r->req.aiocb = NULL;
@@ -289,7 +289,8 @@ static void scsi_read_complete(void * opaque, int ret)
             goto done;
         }
     }
-    printf("qiov.size = %u\n", (unsigned)r->qiov.size);
+    fprintf(stderr, "qiov.size = %u\n", (unsigned)r->qiov.size);
+
 
     DPRINTF("Data ready tag=0x%x len=%zd\n", r->req.tag, r->qiov.size);
 
@@ -297,11 +298,12 @@ static void scsi_read_complete(void * opaque, int ret)
     r->sector += n;
     r->sector_count -= n;
     scsi_req_data(&r->req, r->qiov.size);
-    printf("scsi1 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+    fprintf(stderr, "scsi1 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
 
 done:
     scsi_req_unref(&r->req);
+    scsi_req_complete(&r->req, GOOD);
 }
 
 /* Actually issue a read to the block device.  */
