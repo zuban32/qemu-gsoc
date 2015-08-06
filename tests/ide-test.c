@@ -45,6 +45,8 @@
 #define IDE_BASE 0x1f0
 #define IDE_PRIMARY_IRQ 14
 
+#define ATAPI_BLOCK_SIZE 2048
+
 enum {
     reg_data        = 0x0,
     reg_nsectors    = 0x2,
@@ -80,6 +82,7 @@ enum {
     CMD_WRITE_DMA   = 0xca,
     CMD_FLUSH_CACHE = 0xe7,
     CMD_IDENTIFY    = 0xec,
+    CMD_PACKET      = 0xa0,
 
     CMDF_ABORT      = 0x100,
     CMDF_NO_BM      = 0x200,
@@ -585,6 +588,67 @@ static void test_isa_retry_flush(const char *machine)
     test_retry_flush("isapc");
 }
 
+typedef struct Read10CDB {
+    uint8_t opcode;
+    uint8_t flags;
+    uint32_t lba;
+    uint8_t reserved;
+    uint16_t nblocks;
+    uint8_t control;
+    uint16_t padding;
+} __attribute__((__packed__)) Read10CDB;
+
+static void send_scsi_cdb_read10(uint32_t lba, uint16_t nblocks)
+{
+    Read10CDB pkt = { .padding = 0 };
+    int i;
+
+    /* Construct SCSI CDB packet */
+    pkt.opcode = 0x28;
+    pkt.lba = cpu_to_be32(lba);
+    pkt.nblocks = cpu_to_be16(nblocks);
+
+    /* Send Packet */
+    for (i = 0; i < sizeof(Read10CDB)/2; i++) {
+        outw(IDE_BASE + reg_data, ((uint16_t *)&pkt)[i]);
+    }
+}
+
+static void test_cdrom_pio(void)
+{
+    FILE *fh;
+    size_t patt_len = ATAPI_BLOCK_SIZE * 16;
+    char *pattern = g_malloc(patt_len);
+    char *rx = g_malloc0(ATAPI_BLOCK_SIZE);
+    int i;
+
+    /* Prepopulate the CDROM with an interesting pattern */
+    generate_pattern(pattern, patt_len, ATAPI_BLOCK_SIZE);
+    fh = fopen(tmp_path, "w+");
+    fwrite(pattern, ATAPI_BLOCK_SIZE, 16, fh);
+    fclose(fh);
+
+    ide_test_start(
+      "-drive file=%s,if=ide,media=cdrom,cache=writeback,format=raw", tmp_path);
+
+    /* PACKET command on device 0 */
+    outb(IDE_BASE + reg_device, 0);
+    outb(IDE_BASE + reg_command, CMD_PACKET);
+
+    /* SCSI CDB (READ10) -- read 2048 bytes from block 0 */
+    send_scsi_cdb_read10(0, ATAPI_BLOCK_SIZE);
+
+    /* Read back data */
+    for (i = 0; i < ATAPI_BLOCK_SIZE/2; i++) {
+        ((uint16_t*)rx)[i] = inw(IDE_BASE + reg_data);
+    }
+
+    g_assert_cmpint(memcmp(pattern, rx, ATAPI_BLOCK_SIZE), ==, 0);
+    g_free(pattern);
+    g_free(rx);
+    test_bmdma_teardown();
+}
+
 int main(int argc, char **argv)
 {
     const char *arch = qtest_get_arch();
@@ -627,6 +691,8 @@ int main(int argc, char **argv)
     qtest_add_func("/ide/flush/nodev", test_flush_nodev);
     qtest_add_func("/ide/flush/retry_pci", test_pci_retry_flush);
     qtest_add_func("/ide/flush/retry_isa", test_isa_retry_flush);
+
+    qtest_add_func("/ide/cdrom/pio", test_cdrom_pio);
 
     ret = g_test_run();
 
