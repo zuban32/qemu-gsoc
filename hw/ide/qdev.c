@@ -65,6 +65,14 @@ static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
 //     ide_atapi_cmd_ok(s);
 }
 
+static void ide_bridge_ok(IDEState *s)
+{
+    ide_atapi_cmd_ok(s);
+    ide_set_irq(s->bus);
+}
+
+static int num = 0;
+
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
     fprintf(stderr, "bridge_complete\n");
@@ -74,63 +82,59 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
     IDEState *s = bus->ifs;  
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
+/*    
+    if(s->packet_transfer_size == 0)
+        ide_atapi_cmd_ok(s);*/
     
-    int byte_count_limit, size = 2048;
-   s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
-            byte_count_limit = s->lcyl | (s->hcyl << 8);
-            if (byte_count_limit == 0xffff)
-                byte_count_limit--;
-//             fprintf(stderr, "atapi: size = %d\n", s->packet_transfer_size);
-//             size = s->packet_transfer_size;
-            if (size > byte_count_limit) {
-                /* byte count limit must be even if this case */
-                if (byte_count_limit & 1)
-                    byte_count_limit--;
-                size = byte_count_limit;
-            }
-            s->lcyl = size;
-            s->hcyl = size >> 8;
-            s->elementary_transfer_size = size;
-            /* we cannot transmit more than one sector at a time */
-            if (s->lba != -1) {
-                if (size > (s->cd_sector_size - s->io_buffer_index))
-                    size = (s->cd_sector_size - s->io_buffer_index);
-            }
-            s->packet_transfer_size -= size;
-            s->elementary_transfer_size -= size;
-            s->io_buffer_index += size;
-            
-            if(req->cmd.buf[0] == 0x28)
+/*    s->io_buffer_index = 2048*/;
+    if(!num)
+        s->lba = 17;
+    else
+        s->lba = 38;
+    int size = s->packet_transfer_size;
+    
+    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
+    s->lcyl = size;
+    s->hcyl = size >> 8;
+    s->elementary_transfer_size = size;
+    s->packet_transfer_size -= size;
+    s->elementary_transfer_size -= size;
+    s->io_buffer_index += size;
+//     
+//     int byte_count_limit, size = 2048;
+//    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
+//             byte_count_limit = s->lcyl | (s->hcyl << 8);
+//             if (byte_count_limit == 0xffff)
+//                 byte_count_limit--;
+// //             fprintf(stderr, "atapi: size = %d\n", s->packet_transfer_size);
+// //             size = s->packet_transfer_size;
+//             if (size > byte_count_limit) {
+//                 /* byte count limit must be even if this case */
+//                 if (byte_count_limit & 1)
+//                     byte_count_limit--;
+//                 size = byte_count_limit;
+//             }
+//             s->lcyl = size;
+//             s->hcyl = size >> 8;
+//             s->elementary_transfer_size = size;
+//             /* we cannot transmit more than one sector at a time */
+//             if (s->lba != -1) {
+//                 if (size > (s->cd_sector_size - s->io_buffer_index))
+//                     size = (s->cd_sector_size - s->io_buffer_index);
+//             }
+//             s->packet_transfer_size -= size;
+//             s->elementary_transfer_size -= size;
+//             s->io_buffer_index += size;
+//             
+//             if(req->cmd.buf[0] == 0x28)
             qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
     
-//     if(req->cmd.buf[0] != 0x28)
-    ide_atapi_cmd_ok(s);
     if(req->cmd.buf[0] == 0x28)
-    ide_set_irq(bus);
-    
-//     ide_atapi_cmd_ok(s);
-//         ide_set_irq(s->bus);
-//     IDEState *s = IDE_BRIDGE(req->bus->qbus.parent);
-//     IDEState *s = LSI53C895A(req->bus->qbus.parent);
-//     int out;
-//     
-//     out = (s->sstat1 & PHASE_MASK) == PHASE_DO;
-//     DPRINTF("Command complete status=%d\n", (int)status);
-//     s->status = status;
-//     s->command_complete = 2;
-//     if (s->waiting && s->dbc != 0) {
-//         /* Raise phase mismatch for short transfers.  */
-//         lsi_bad_phase(s, out, PHASE_ST);
-//     } else {
-//         lsi_set_phase(s, PHASE_ST);
-//     }
-//     
-//     if (req->hba_private == s->current) {
-//         req->hba_private = NULL;
-//         lsi_request_free(s, s->current);
-//         scsi_req_unref(req);
-//     }
-//     lsi_resume_script(s);
+        ide_transfer_start(s, s->io_buffer, 2048, &ide_bridge_ok);
+    else
+        ide_atapi_cmd_ok(s);
+//     if(req->cmd.buf[0] == 0x28)
+//     ide_set_irq(bus);
 //     ide_atapi_cmd_ok(s);
 }
 
@@ -189,7 +193,7 @@ static int ide_qdev_init(DeviceState *qdev)
     IDEDeviceClass *dc = IDE_DEVICE_GET_CLASS(dev);
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, qdev->parent_bus);
 
-    if (!dev->conf.blk) {
+    if (!dev->conf.blk && dc->parent_class.desc ) {
         error_report("No drive specified");
         goto err;
     }

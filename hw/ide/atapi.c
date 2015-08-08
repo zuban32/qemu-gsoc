@@ -1260,8 +1260,8 @@ void ide_atapi_cmd(IDEState *s)
      * GET_EVENT_STATUS_NOTIFICATION to detect such tray open/close
      * states rely on this behavior.
      */
-    if (!(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
-        !s->tray_open && blk_is_inserted(s->blk) && s->cdrom_changed) {
+    if ((s->drive_kind != IDE_BRIDGE) && (!(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
+        !s->tray_open && blk_is_inserted(s->blk) && s->cdrom_changed)) {
 
         if (s->cdrom_changed == 1) {
             ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
@@ -1276,13 +1276,13 @@ void ide_atapi_cmd(IDEState *s)
 
     /* Report a Not Ready condition if appropriate for the command */
     if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
-        (!media_present(s) || !blk_is_inserted(s->blk)))
+        (s->drive_kind != IDE_BRIDGE && (!media_present(s) || !blk_is_inserted(s->blk))))
     {
         ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
         return;
     }
     
-    int cmd = buf[0];
+//     int cmd = buf[0];
     
     if(s->drive_kind == IDE_BRIDGE)
     {   
@@ -1296,8 +1296,8 @@ void ide_atapi_cmd(IDEState *s)
     /* Execute the command */
     if (atapi_cmd_table[s->io_buffer[0]].handler) {
         atapi_cmd_table[s->io_buffer[0]].handler(s, buf);    
-        if(cmd == 0x28)
-            printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
+//         if(cmd == 0x28)
+//             printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
 
         return;
     }

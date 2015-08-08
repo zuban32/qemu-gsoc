@@ -488,16 +488,25 @@ static void ide_cmd_done(IDEState *s)
 }
 
 void ide_transfer_stop(IDEState *s)
-{
+{  
     s->end_transfer_func = ide_transfer_stop;
     s->data_ptr = s->io_buffer;
     s->data_end = s->io_buffer;
     s->status &= ~DRQ_STAT;
     fprintf(stderr, "transfer_stop\n");
     int off = 4 * 0;
-    for(off = 0; off < (2048 / 4) - 1; off += 4)
+//     for(off = 0; off < (2048 / 4) - 1; off += 4)
     fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0 + off],
             s->io_buffer[1 + off],s->io_buffer[2 + off],s->io_buffer[3 + off]);
+    fprintf(stderr, "string check: %d\n", strcmp((char*)&s->io_buffer[1], "CD001\001EL TORITO SPECIFICATION"));
+    fprintf(stderr, "IDEState:\nbuf_index = %d\nbuf_len = %d\n", s->io_buffer_index, s->io_buffer_total_len);
+    fprintf(stderr, "nsector = %d\nlcyl = %d, hcyl = %d\nlba = %d\n", s->nsector, s->lcyl, s->hcyl, s->lba);
+    fprintf(stderr, "status = %d\nsector = %d, error = %d\n", s->status, s->error, s->sector);
+    
+    fprintf(stderr, "data_ptr = %p, data_end = %p, io_buffer = %p\n", s->data_ptr, s->data_end, s->io_buffer);
+//     uint8_t *buf = (uint8_t *)s->qiov.iov->iov_base; 
+//     fprintf(stderr, "iov: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]);
+    
     ide_cmd_done(s);
 }
 
@@ -1421,6 +1430,7 @@ abort_cmd:
 
 static bool cmd_identify_packet(IDEState *s, uint8_t cmd)
 {
+    fprintf(stderr, "identify packet\n");
     ide_atapi_identify(s);
     s->status = READY_STAT | SEEK_STAT;
     ide_transfer_start(s, s->io_buffer, 512, ide_transfer_stop);
@@ -2019,7 +2029,7 @@ static bool ide_is_pio_out(IDEState *s)
         return true;
     }
 
-    abort();
+    return true;
 }
 
 void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
