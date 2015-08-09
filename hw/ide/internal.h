@@ -429,6 +429,8 @@ struct IDEState {
     uint8_t *smart_selftest_data;
     /* AHCI */
     int ncq_queues;
+    /* SCSI bridgeing */
+    SCSIRequest *cur_req;
 };
 
 struct IDEDMAOps {

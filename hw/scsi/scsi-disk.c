@@ -37,6 +37,7 @@ do { printf("scsi-disk: " fmt , ## __VA_ARGS__); } while (0)
 #include "sysemu/blockdev.h"
 #include "hw/block/block.h"
 #include "sysemu/dma.h"
+#include "hw/ide/internal.h"
 
 #ifdef __linux
 #include <scsi/sg.h>
@@ -276,7 +277,7 @@ static void scsi_read_complete(void * opaque, int ret)
     
     fprintf(stderr, "scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
-    assert(r->req.aiocb != NULL);
+//     assert(r->req.aiocb != NULL);
     r->req.aiocb = NULL;
     block_acct_done(blk_get_stats(s->qdev.conf.blk), &r->acct);
     if (r->req.io_canceled) {
@@ -336,14 +337,20 @@ static void scsi_do_read(void *opaque, int ret)
         r->req.resid -= r->req.sg->size;
         r->req.aiocb = dma_blk_read(s->qdev.conf.blk, r->req.sg, r->sector,
                                     scsi_dma_complete, r);
-    } else {
+    } else {  
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
         fprintf(stderr, "n = %d\n", n);
+        fprintf(stderr, "scsi: size = %d\n", (unsigned)r->qiov.size);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
                          n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
         fprintf(stderr, "blk_read: sect = %lu, sct_num = %d\n", r->sector, n);
+        IDEDevice *dev = IDE_DEVICE(r->req.bus->qbus.parent);
+        IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+        IDEState *state = bus->ifs;
+        state->status |= BUSY_STAT;
         r->req.aiocb = blk_aio_readv(s->qdev.conf.blk, r->sector, &r->qiov, n,
                                      scsi_read_complete, r);
+//         scsi_read_complete(opaque, ret);
     }
 
 done:

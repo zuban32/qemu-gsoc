@@ -45,6 +45,9 @@ static inline int ube32_to_cpu(const uint8_t *buf)
 
 static void ide_bridge_ok(IDEState *s)
 {
+//     SCSIRequset *req = s->cur_req;
+//     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
+//     qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
     ide_atapi_cmd_ok(s);
     ide_set_irq(s->bus);
 }
@@ -52,7 +55,7 @@ static void ide_bridge_ok(IDEState *s)
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
     fprintf(stderr, "bridge_complete\n");
-    scsi_req_unref(req);
+//     scsi_req_unref(req);
     
     IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
@@ -70,8 +73,10 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 //     s->packet_transfer_size -= size;
 //     s->elementary_transfer_size -= size;
 //     s->io_buffer_index += size;
-    
-    qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    s->status &= ~BUSY_STAT;
+        qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+        fprintf(stderr, "r.qiov.size = %d\n", (unsigned)r->qiov.size);
+
     
     if(req->cmd.buf[0] == 0x28)
         ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);

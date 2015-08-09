@@ -472,6 +472,9 @@ void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
     s->end_transfer_func = end_transfer_func;
     s->data_ptr = buf;
     s->data_end = buf + size;
+    
+    fprintf(stderr, "start: size = %ld\n", s->data_end - s->data_ptr);
+    
     if (!(s->status & ERR_STAT)) {
         s->status |= DRQ_STAT;
     }
@@ -2034,6 +2037,7 @@ static bool ide_is_pio_out(IDEState *s)
 
 void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
 {
+//     fprintf(stderr, "data_writew\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2054,6 +2058,7 @@ void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readw(void *opaque, uint32_t addr)
 {
+//     fprintf(stderr, "data_readw\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2062,6 +2067,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     /* PIO data access allowed only when DRQ bit is set. The result of a read
      * during PIO in is indeterminate, return 0 and don't move forward. */
     if (!(s->status & DRQ_STAT) || !ide_is_pio_out(s)) {
+//         fprintf(stderr, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
         return 0;
     }
 
@@ -2069,13 +2075,16 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     ret = cpu_to_le16(*(uint16_t *)p);
     p += 2;
     s->data_ptr = p;
+//     fprintf(stderr, "end; diff = %ld\n", s->data_end - p);
     if (p >= s->data_end)
         s->end_transfer_func(s);
+//     fprintf(stderr, "ret = %d\n", ret);
     return ret;
 }
 
 void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 {
+//     fprintf(stderr, "data_writel\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2096,6 +2105,7 @@ void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readl(void *opaque, uint32_t addr)
 {
+//     fprintf(stderr, "data_readl\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;

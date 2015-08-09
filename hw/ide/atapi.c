@@ -1289,8 +1289,8 @@ void ide_atapi_cmd(IDEState *s)
     {   
         IDEDevice *dev = s->bus->master;
         SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
-        SCSIRequest *req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
-        if(scsi_req_enqueue(req)) scsi_req_continue(req);
+        s->cur_req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
+        if(scsi_req_enqueue(s->cur_req)) scsi_req_continue(s->cur_req);
         return;
     }
     
