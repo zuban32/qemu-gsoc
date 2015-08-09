@@ -327,8 +327,6 @@ static void scsi_do_read(void *opaque, int ret)
             goto done;
         }
     }
-    
-    r->sector_count = 4;
 
     /* The request is used as the AIO opaque value, so add a ref.  */
     scsi_req_ref(&r->req);
@@ -340,8 +338,6 @@ static void scsi_do_read(void *opaque, int ret)
                                     scsi_dma_complete, r);
     } else {
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
-        if(n != 4)
-            n = 4;
         fprintf(stderr, "n = %d\n", n);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
                          n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
@@ -362,6 +358,7 @@ static void scsi_read_data(SCSIRequest *req)
     bool first;
 
     DPRINTF("Read sector_count=%d\n", r->sector_count);
+    fprintf(stderr, "sector_count = %d\n", r->sector_count);
     if (r->sector_count == 0) {
         /* This also clears the sense buffer for REQUEST SENSE.  */
         scsi_req_complete(&r->req, GOOD);

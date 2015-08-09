@@ -38,40 +38,16 @@ static inline int ube32_to_cpu(const uint8_t *buf)
     return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
 }
 
-static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
-{
-    fprintf(stderr, "bridge transfer\n");
-//     IDEState *s = IDE_BRIDGE(req->bus->qbus.parent);
-//     IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
-//     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
-//     IDEState *s = bus->ifs;
-//      
-//     int nb_sectors, lba;
-//     nb_sectors = ube16_to_cpu(req->cmd.buf + 7);
-//     lba = ube32_to_cpu(req->cmd.buf + 2);
-//     
-//     s->lba = lba;
-//     s->packet_transfer_size = nb_sectors * 2048;
-//     s->elementary_transfer_size = 0;
-//     s->io_buffer_index = 2048;
-//     s->cd_sector_size = 2048;
-//     
-//     s->status = READY_STAT | SEEK_STAT;
-    
-//     fprintf(stderr, "ide-bridge transfer: lba = %d, pck_size = %d, el_size = %d, index = %d, sect_size = %d\n",
-//         s->lba, s->packet_transfer_size, s->elementary_transfer_size, s->io_buffer_index, s->cd_sector_size
-//     );
-    
-//     ide_atapi_cmd_ok(s);
-}
+// static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
+// {
+//     fprintf(stderr, "bridge transfer\n");
+// }
 
 static void ide_bridge_ok(IDEState *s)
 {
     ide_atapi_cmd_ok(s);
     ide_set_irq(s->bus);
 }
-
-static int num = 0;
 
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
@@ -82,60 +58,25 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
     IDEState *s = bus->ifs;  
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
-/*    
-    if(s->packet_transfer_size == 0)
-        ide_atapi_cmd_ok(s);*/
+   
+//     if(s->packet_transfer_size == 0)
+//         ide_atapi_cmd_ok(s);
     
-/*    s->io_buffer_index = 2048*/;
-    if(!num)
-        s->lba = 17;
-    else
-        s->lba = 38;
-    int size = s->packet_transfer_size;
+//     int size = r->qiov.size;    
+//     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
+//     s->lcyl = size;
+//     s->hcyl = size >> 8;
+//     s->elementary_transfer_size = size;
+//     s->packet_transfer_size -= size;
+//     s->elementary_transfer_size -= size;
+//     s->io_buffer_index += size;
     
-    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
-    s->lcyl = size;
-    s->hcyl = size >> 8;
-    s->elementary_transfer_size = size;
-    s->packet_transfer_size -= size;
-    s->elementary_transfer_size -= size;
-    s->io_buffer_index += size;
-//     
-//     int byte_count_limit, size = 2048;
-//    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
-//             byte_count_limit = s->lcyl | (s->hcyl << 8);
-//             if (byte_count_limit == 0xffff)
-//                 byte_count_limit--;
-// //             fprintf(stderr, "atapi: size = %d\n", s->packet_transfer_size);
-// //             size = s->packet_transfer_size;
-//             if (size > byte_count_limit) {
-//                 /* byte count limit must be even if this case */
-//                 if (byte_count_limit & 1)
-//                     byte_count_limit--;
-//                 size = byte_count_limit;
-//             }
-//             s->lcyl = size;
-//             s->hcyl = size >> 8;
-//             s->elementary_transfer_size = size;
-//             /* we cannot transmit more than one sector at a time */
-//             if (s->lba != -1) {
-//                 if (size > (s->cd_sector_size - s->io_buffer_index))
-//                     size = (s->cd_sector_size - s->io_buffer_index);
-//             }
-//             s->packet_transfer_size -= size;
-//             s->elementary_transfer_size -= size;
-//             s->io_buffer_index += size;
-//             
-//             if(req->cmd.buf[0] == 0x28)
-            qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
     
     if(req->cmd.buf[0] == 0x28)
-        ide_transfer_start(s, s->io_buffer, 2048, &ide_bridge_ok);
+        ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);
     else
-        ide_atapi_cmd_ok(s);
-//     if(req->cmd.buf[0] == 0x28)
-//     ide_set_irq(bus);
-//     ide_atapi_cmd_ok(s);
+        ide_bridge_ok(s);
 }
 
 static const struct SCSIBusInfo atapi_scsi_info = {
@@ -143,7 +84,7 @@ static const struct SCSIBusInfo atapi_scsi_info = {
     .max_target = 0,
     .max_lun = 0,
     
-    .transfer_data = ide_bridge_transfer,
+//     .transfer_data = ide_bridge_transfer,
     .complete = ide_bridge_complete,
     .cancel = NULL
 };
