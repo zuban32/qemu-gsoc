@@ -468,12 +468,13 @@ static inline void ide_abort_command(IDEState *s)
 void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
                         EndTransferFunc *end_transfer_func)
 {
-    fprintf(stderr, "transfer_start\n");
+    fprintf(stderr, "transfer_start: %d\n", size);
     s->end_transfer_func = end_transfer_func;
     s->data_ptr = buf;
     s->data_end = buf + size;
     
     fprintf(stderr, "start: size = %ld\n", s->data_end - s->data_ptr);
+    fprintf(stderr, "status = %x\n", s->status);
     
     if (!(s->status & ERR_STAT)) {
         s->status |= DRQ_STAT;
@@ -1880,12 +1881,14 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
 
 uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
 {
+//     fprintf(stderr, "ide_ioport_read\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint32_t addr;
     int ret, hob;
 
     addr = addr1 & 7;
+//     fprintf(stderr, "addr = %x\n", addr);
     /* FIXME: HOB readback uses bit 7, but it's always set right now */
     //hob = s->select & (1 << 7);
     hob = 0;
@@ -1907,6 +1910,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
+            fprintf(stderr, "nsector\n");
             ret = s->nsector & 0xff;
         } else {
 	    ret = s->hob_nsector;
@@ -1925,6 +1929,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
+            fprintf(stderr, "lcyl\n");
             ret = s->lcyl;
         } else {
 	    ret = s->hob_lcyl;
@@ -1934,7 +1939,10 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
+            fprintf(stderr, "hcyl\n");
             ret = s->hcyl;
+//             if(!ret)
+//                 ret = 0xfc;
         } else {
 	    ret = s->hob_hcyl;
         }
@@ -1957,9 +1965,9 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         qemu_irq_lower(bus->irq);
         break;
     }
-#ifdef DEBUG_IDE
-    printf("ide: read addr=0x%x val=%02x\n", addr1, ret);
-#endif
+    // #ifdef DEBUG_IDE
+    fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
+// #endif
     return ret;
 }
 
@@ -2058,7 +2066,7 @@ void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readw(void *opaque, uint32_t addr)
 {
-//     fprintf(stderr, "data_readw\n");
+    fprintf(stderr, "data_readw\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2067,7 +2075,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     /* PIO data access allowed only when DRQ bit is set. The result of a read
      * during PIO in is indeterminate, return 0 and don't move forward. */
     if (!(s->status & DRQ_STAT) || !ide_is_pio_out(s)) {
-//         fprintf(stderr, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
+        fprintf(stderr, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
         return 0;
     }
 

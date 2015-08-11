@@ -1636,6 +1636,7 @@ void scsi_req_continue(SCSIRequest *req)
     if (req->cmd.mode == SCSI_XFER_TO_DEV) {
         req->ops->write_data(req);
     } else {
+        fprintf(stderr, "read data\n");
         req->ops->read_data(req);
     }
 }
@@ -1654,7 +1655,9 @@ void scsi_req_data(SCSIRequest *req, int len)
     assert(req->cmd.mode != SCSI_XFER_NONE);
     if (!req->sg) {
         req->resid -= len;
-//         req->bus->info->transfer_data(req, len);
+        fprintf(stderr, "same as read\n");
+//         if(req->cmd.buf[0] == 0x12)
+//             req->bus->info->transfer_data(req, len);
         return;
     }
 

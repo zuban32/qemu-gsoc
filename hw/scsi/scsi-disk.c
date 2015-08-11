@@ -105,6 +105,9 @@ static uint32_t scsi_init_iovec(SCSIDiskReq *r, size_t size)
         r->buflen = size;
         r->iov.iov_base = blk_blockalign(s->qdev.conf.blk, r->buflen);
     }
+    
+//     int sector_count == MIN(r->sector_count,  128);
+    
     r->iov.iov_len = MIN(r->sector_count * 512, r->buflen);
     qemu_iovec_init_external(&r->qiov, &r->iov, 1);
     return r->qiov.size / 512;
@@ -371,6 +374,9 @@ static void scsi_read_data(SCSIRequest *req)
         scsi_req_complete(&r->req, GOOD);
         return;
     }
+    
+//     if(r->sector_count == 252)
+//         r->sector_count = 126;
 
     /* No data transfer may already be in progress */
     assert(r->req.aiocb == NULL);
@@ -1187,6 +1193,7 @@ static int mode_sense_page(SCSIDiskState *s, int page, uint8_t **p_outbuf,
 
 static int scsi_disk_emulate_mode_sense(SCSIDiskReq *r, uint8_t *outbuf)
 {
+    fprintf(stderr, "scsi: mode sense\n");
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
     uint64_t nb_sectors;
     bool dbd;
@@ -1353,11 +1360,17 @@ static void scsi_disk_emulate_read_data(SCSIRequest *req)
         r->iov.iov_len = 0;
         r->started = true;
         scsi_req_data(&r->req, buflen);
-        return;
+//         if(req->cmd.buf[0] != INQUIRY && req->cmd.buf[0])
+//             return;
     }
+    uint8_t *buf = r->iov.iov_base;
+    int off = 0;
 
+    scsi_req_unref(req);
+    fprintf(stderr, "emulate - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
     /* This also clears the sense buffer for REQUEST SENSE.  */
     scsi_req_complete(&r->req, GOOD);
+    fprintf(stderr, "Returned from emulate_read_data\n");
 }
 
 static int scsi_disk_check_mode_select(SCSIDiskState *s, int page,

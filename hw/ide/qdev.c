@@ -38,19 +38,36 @@ static inline int ube32_to_cpu(const uint8_t *buf)
     return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
 }
 
-// static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
-// {
-//     fprintf(stderr, "bridge transfer\n");
-// }
-
 static void ide_bridge_ok(IDEState *s)
 {
-//     SCSIRequset *req = s->cur_req;
-//     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
-//     qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    fprintf(stderr, "bridge_ok\n");
+    //     SCSIRequset *req = s->cur_req;
+    //     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
+    //     qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+//     s->status &= ~BUSY_STAT;
     ide_atapi_cmd_ok(s);
     ide_set_irq(s->bus);
 }
+
+static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
+{
+    fprintf(stderr, "bridge transfer\n");
+    
+    IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
+    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+    IDEState *s = bus->ifs;  
+    SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
+    
+    qemu_iovec_concat_iov(&r->qiov, &r->iov, r->iov.iov_len, 0, r->iov.iov_len);
+    
+    qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    fprintf(stderr, "transfer: io_data [%x][%x][%x][%x]\n", s->io_buffer[0], s->io_buffer[1], s->io_buffer[2], s->io_buffer[3]);
+    
+    s->status |= BUSY_STAT;
+    
+    ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);
+}
+
 
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
@@ -61,27 +78,62 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
     IDEState *s = bus->ifs;  
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
+    
+    int cmd = req->cmd.buf[0];
    
-//     if(s->packet_transfer_size == 0)
-//         ide_atapi_cmd_ok(s);
+    s->status &= ~(BUSY_STAT | DRQ_STAT);
+    fprintf(stderr, "iov.len = %d\n", (int)r->iov.iov_len);
     
-//     int size = r->qiov.size;    
-//     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
-//     s->lcyl = size;
-//     s->hcyl = size >> 8;
-//     s->elementary_transfer_size = size;
-//     s->packet_transfer_size -= size;
-//     s->elementary_transfer_size -= size;
-//     s->io_buffer_index += size;
-    s->status &= ~BUSY_STAT;
+    if(cmd == READ_10)
         qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
-        fprintf(stderr, "r.qiov.size = %d\n", (unsigned)r->qiov.size);
-
+    else if(cmd == INQUIRY || cmd == MODE_SENSE_10 || cmd == READ_TOC || cmd == READ_CAPACITY_10)
+    {
+        switch(cmd) {
+            case INQUIRY:
+                r->iov.iov_len = 36;
+                break;
+            case MODE_SENSE_10:
+                r->iov.iov_len = 30;
+                break;
+            case READ_TOC:
+                r->iov.iov_len = 12;
+                break;
+            case READ_CAPACITY_10:
+                r->iov.iov_len = 8;
+                break;
+            default:
+                break;
+        }
+        
+//         fprintf(stderr, "r->buflen = %d\n", r->buflen);
+        
+        qemu_iovec_concat_iov(&r->qiov, &r->iov, r->iov.iov_len, 0, r->iov.iov_len);
+        
+        qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+        fprintf(stderr, "transfer: io_data [%x][%x][%x][%x]\n", s->io_buffer[0], s->io_buffer[1], s->io_buffer[2], s->io_buffer[3]);
+    }
     
-    if(req->cmd.buf[0] == 0x28)
+    
+    s->status = READY_STAT | SEEK_STAT;
+    s->io_buffer_index = 0;
+    int size = r->qiov.size;
+    
+    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
+    s->lcyl = size;
+    s->hcyl = size >> 8;
+    
+    fprintf(stderr, "r.qiov.size = %d\n", (unsigned)r->qiov.size);
+    
+    printf("bridge_complete: cmd = %x\n", req->cmd.buf[0]);
+    fflush(stdout);
+    
+    if(req->cmd.buf[0] != TEST_UNIT_READY && req->cmd.buf[0] != ALLOW_MEDIUM_REMOVAL) {
         ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);
+        ide_set_irq(s->bus);
+    }
     else
         ide_bridge_ok(s);
+    fprintf(stderr, "return from complete\n");
 }
 
 static const struct SCSIBusInfo atapi_scsi_info = {
@@ -89,7 +141,7 @@ static const struct SCSIBusInfo atapi_scsi_info = {
     .max_target = 0,
     .max_lun = 0,
     
-//     .transfer_data = ide_bridge_transfer,
+    .transfer_data = ide_bridge_transfer,
     .complete = ide_bridge_complete,
     .cancel = NULL
 };

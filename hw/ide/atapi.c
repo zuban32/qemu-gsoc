@@ -181,6 +181,7 @@ void ide_atapi_cmd_reply_end(IDEState *s)
            s->io_buffer_index);
 // #endif
     if (s->packet_transfer_size <= 0) {
+        fprintf(stderr, "end of transfer\n");
         /* end of transfer */
         ide_atapi_cmd_ok(s);
         ide_set_irq(s->bus);
@@ -758,6 +759,7 @@ static void cmd_inquiry(IDEState *s, uint8_t *buf)
 
  out:
     buf[size_idx] = idx - preamble_len;
+    fprintf(stderr, "inquiry: reply %d %d\n", idx, max_len);
     ide_atapi_cmd_reply(s, idx, max_len);
     return;
 }
@@ -1076,6 +1078,7 @@ static void cmd_read_toc_pma_atip(IDEState *s, uint8_t* buf)
         ide_atapi_cmd_error(s, ILLEGAL_REQUEST,
                             ASC_INV_FIELD_IN_CMD_PACKET);
     }
+    fprintf(stderr, "read toc: len = %d\n", len);
 }
 
 static void cmd_read_cdvd_capacity(IDEState *s, uint8_t* buf)
