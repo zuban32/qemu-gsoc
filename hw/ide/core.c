@@ -470,15 +470,16 @@ void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
 {
     fprintf(stderr, "transfer_start: %d\n", size);
     s->end_transfer_func = end_transfer_func;
+    fprintf(stderr, "transfer_func = %p\n", s->end_transfer_func);
     s->data_ptr = buf;
     s->data_end = buf + size;
     
     fprintf(stderr, "start: size = %ld\n", s->data_end - s->data_ptr);
-    fprintf(stderr, "status = %x\n", s->status);
     
     if (!(s->status & ERR_STAT)) {
         s->status |= DRQ_STAT;
     }
+    fprintf(stderr, "status = %x\n", s->status);
     if (s->bus->dma->ops->start_transfer) {
         s->bus->dma->ops->start_transfer(s->bus->dma);
     }
@@ -499,15 +500,15 @@ void ide_transfer_stop(IDEState *s)
     s->status &= ~DRQ_STAT;
     fprintf(stderr, "transfer_stop\n");
     int off = 4 * 0;
-//     for(off = 0; off < (2048 / 4) - 1; off += 4)
+    for(off = 0; off < (2048 / 4) - 1; off += 4)
     fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0 + off],
             s->io_buffer[1 + off],s->io_buffer[2 + off],s->io_buffer[3 + off]);
-    fprintf(stderr, "string check: %d\n", strcmp((char*)&s->io_buffer[1], "CD001\001EL TORITO SPECIFICATION"));
-    fprintf(stderr, "IDEState:\nbuf_index = %d\nbuf_len = %d\n", s->io_buffer_index, s->io_buffer_total_len);
-    fprintf(stderr, "nsector = %d\nlcyl = %d, hcyl = %d\nlba = %d\n", s->nsector, s->lcyl, s->hcyl, s->lba);
-    fprintf(stderr, "status = %d\nsector = %d, error = %d\n", s->status, s->error, s->sector);
-    
-    fprintf(stderr, "data_ptr = %p, data_end = %p, io_buffer = %p\n", s->data_ptr, s->data_end, s->io_buffer);
+//     fprintf(stderr, "string check: %d\n", strcmp((char*)&s->io_buffer[1], "CD001\001EL TORITO SPECIFICATION"));
+//     fprintf(stderr, "IDEState:\nbuf_index = %d\nbuf_len = %d\n", s->io_buffer_index, s->io_buffer_total_len);
+//     fprintf(stderr, "nsector = %d\nlcyl = %d, hcyl = %d\nlba = %d\n", s->nsector, s->lcyl, s->hcyl, s->lba);
+//     fprintf(stderr, "status = %d\nsector = %d, error = %d\n", s->status, s->error, s->sector);
+//     
+//     fprintf(stderr, "data_ptr = %p, data_end = %p, io_buffer = %p\n", s->data_ptr, s->data_end, s->io_buffer);
 //     uint8_t *buf = (uint8_t *)s->qiov.iov->iov_base; 
 //     fprintf(stderr, "iov: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]);
     
@@ -1076,6 +1077,7 @@ static void ide_clear_hob(IDEBus *bus)
 void ide_ioport_write(void *opaque, uint32_t addr, uint32_t val)
 {
     IDEBus *bus = opaque;
+    fprintf(stderr, "ioport write\n");
 
 #ifdef DEBUG_IDE
     printf("IDE: write addr=0x%x val=0x%02x\n", addr, val);
@@ -1475,10 +1477,11 @@ static bool cmd_device_reset(IDEState *s, uint8_t cmd)
 static bool cmd_packet(IDEState *s, uint8_t cmd)
 {
     fprintf(stderr, "cmd_packet: 0x%x\n", cmd);
-    fprintf(stderr, "s->feature = %d\n", s->feature & 1);
+    fprintf(stderr, "s->feature = %d\n", s->feature);
     /* overlapping commands not supported */
     if (s->feature & 0x02) {
         ide_abort_command(s);
+        fprintf(stderr, "packet abort\n");
         return true;
     }
 
@@ -1488,7 +1491,7 @@ static bool cmd_packet(IDEState *s, uint8_t cmd)
     ide_transfer_start(s, s->io_buffer, ATAPI_PACKET_SIZE,
                        ide_atapi_cmd);
     fprintf(stderr, "cmd_packet_end: 0x%x\n", cmd);
-    fprintf(stderr, "s->feature = %d\n", s->feature & 1);
+    fprintf(stderr, "s->feature = %d\n", s->feature);
     return false;
 }
 
@@ -1830,12 +1833,15 @@ static const struct {
 
 static bool ide_cmd_permitted(IDEState *s, uint32_t cmd)
 {
+    fprintf(stderr, "drive_kind = %d\n", s->drive_kind);
+    fprintf(stderr, "%d %d\n",cmd < ARRAY_SIZE(ide_cmd_table), ide_cmd_table[cmd].flags & (1u << s->drive_kind));
     return cmd < ARRAY_SIZE(ide_cmd_table)
         && (ide_cmd_table[cmd].flags & (1u << s->drive_kind));
 }
 
 void ide_exec_cmd(IDEBus *bus, uint32_t val)
 {
+    fprintf(stderr, "ide_cmd = %x\n", val);
     IDEState *s;
     bool complete;
 
@@ -1845,14 +1851,17 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
     s = idebus_active_if(bus);
     /* ignore commands to non existent slave */
     if (s != bus->ifs && !s->blk) {
+        fprintf(stderr, "slave donot exist\n");
         return;
     }
 
     /* Only DEVICE RESET is allowed while BSY or/and DRQ are set */
-    if ((s->status & (BUSY_STAT|DRQ_STAT)) && val != WIN_DEVICE_RESET)
-        return;
+    if ((s->status & (BUSY_STAT|DRQ_STAT)) && val != WIN_DEVICE_RESET){
+        fprintf(stderr, "busy\n");
+        return;}
 
     if (!ide_cmd_permitted(s, val)) {
+        fprintf(stderr, "forbidden\n");
         ide_abort_command(s);
         ide_set_irq(s->bus);
         return;
@@ -1881,7 +1890,7 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
 
 uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
 {
-//     fprintf(stderr, "ide_ioport_read\n");
+    fprintf(stderr, "ide_ioport_read\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint32_t addr;
@@ -1966,7 +1975,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         break;
     }
     // #ifdef DEBUG_IDE
-    fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
+//     fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
 // #endif
     return ret;
 }
@@ -2030,6 +2039,7 @@ void ide_cmd_write(void *opaque, uint32_t addr, uint32_t val)
  */
 static bool ide_is_pio_out(IDEState *s)
 {
+//     fprintf(stderr, "transfer_func = %p, atapi_cmd = %p\n", s->end_transfer_func, ide_atapi_cmd);
     if (s->end_transfer_func == ide_sector_write ||
         s->end_transfer_func == ide_atapi_cmd) {
         return false;
@@ -2052,7 +2062,13 @@ void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
 
     /* PIO data access allowed only when DRQ bit is set. The result of a write
      * during PIO out is indeterminate, just ignore it. */
-    if (!(s->status & DRQ_STAT) || ide_is_pio_out(s)) {
+    int res1 = s->status & DRQ_STAT;
+    int res2 = ide_is_pio_out(s);
+    
+//     fprintf(stderr, "res1 = %d, res2 = %d\n", res1, res2);
+    
+    if (!res1 || res2) {
+        fprintf(stderr, "pio out\n");
         return;
     }
 
@@ -2072,7 +2088,7 @@ void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readw(void *opaque, uint32_t addr)
 {
-    fprintf(stderr, "data_readw\n");
+//     fprintf(stderr, "data_readw\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2109,7 +2125,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
 
 void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 {
-//     fprintf(stderr, "data_writel\n");
+    fprintf(stderr, "data_writel\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2136,7 +2152,7 @@ void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readl(void *opaque, uint32_t addr)
 {
-//     fprintf(stderr, "data_readl\n");
+    fprintf(stderr, "data_readl\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;

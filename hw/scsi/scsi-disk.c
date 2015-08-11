@@ -1569,6 +1569,7 @@ static inline bool check_lba_range(SCSIDiskState *s,
      * and a 0-block read to the first LBA beyond the end of device is
      * valid.
      */
+    fprintf(stderr, "max_lba = %lu\n", s->qdev.max_lba + 1);
     return (sector_num <= sector_num + nb_sectors &&
             sector_num + nb_sectors <= s->qdev.max_lba + 1);
 }
@@ -2129,11 +2130,13 @@ static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
     case READ_10:
     case READ_12:
     case READ_16:
+        fprintf(stderr, "got to read cmd\n");
         DPRINTF("Read (sector %" PRId64 ", count %u)\n", r->req.cmd.lba, len);
         if (r->req.cmd.buf[1] & 0xe0) {
             goto illegal_request;
         }
         if (!check_lba_range(s, r->req.cmd.lba, len)) {
+            fprintf(stderr, "lba = %lu, len = %d\n", r->req.cmd.lba, len);
             goto illegal_lba;
         }
         r->sector = r->req.cmd.lba * (s->qdev.blocksize / 512);
@@ -2165,9 +2168,11 @@ static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
     default:
         abort();
     illegal_request:
+    fprintf(stderr, "illegal request\n");
         scsi_check_condition(r, SENSE_CODE(INVALID_FIELD));
         return 0;
     illegal_lba:
+    fprintf(stderr, "illegal lba\n");
         scsi_check_condition(r, SENSE_CODE(LBA_OUT_OF_RANGE));
         return 0;
     }

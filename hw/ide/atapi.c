@@ -1246,7 +1246,7 @@ void ide_atapi_cmd(IDEState *s)
 #endif
 
     fprintf(stderr, "ATAPI: buf[0] = 0x%x\n", buf[0]);
-    fprintf(stdout, "ATAPI: buf[0] = 0x%x\n", buf[0]);
+//     fprintf(stdout, "ATAPI: buf[0] = 0x%x\n", buf[0]);
     /*
      * If there's a UNIT_ATTENTION condition pending, only command flagged with
      * ALLOW_UA are allowed to complete. with other commands getting a CHECK

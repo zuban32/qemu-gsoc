@@ -270,6 +270,7 @@ typedef struct IDEDrive {
 static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
 {
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+    fprintf(stderr, "unit = %d\n", dev->unit);
     IDEState *s = bus->ifs + dev->unit;
     Error *err = NULL;
 
@@ -316,8 +317,8 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
         dev->serial = g_strdup(s->drive_serial_str);
     }
 
-    add_boot_device_path(dev->conf.bootindex, &dev->qdev,
-                         dev->unit ? "/disk@1" : "/disk@0");
+//     add_boot_device_path(dev->conf.bootindex, &dev->qdev,
+//                          dev->unit ? "/disk@1" : "/disk@0");
 
     return 0;
 }
