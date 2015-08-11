@@ -1215,6 +1215,8 @@ static uint64_t scsi_cmd_lba(SCSICommand *cmd)
 
 int scsi_cdb_length(uint8_t *buf) {
     int cdb_len;
+    
+    fprintf(stderr, "cdb_len: buf[0] = 0x%x\n", buf[0]);
 
     switch (buf[0] >> 5) {
     case 0:
@@ -1260,13 +1262,15 @@ int scsi_req_parse_cdb(SCSIDevice *dev, SCSICommand *cmd, uint8_t *buf)
         break;
     }
 
-    if (rc != 0)
-        return rc;
+//     if (rc != 0)
+//         return rc;
+    
+    fprintf(stderr, "cmd_len = %d\n", cmd->len);
 
     memcpy(cmd->buf, buf, cmd->len);
     scsi_cmd_xfer_mode(cmd);
     cmd->lba = scsi_cmd_lba(cmd);
-    return 0;
+    return rc;
 }
 
 void scsi_device_report_change(SCSIDevice *dev, SCSISense sense)
@@ -1637,6 +1641,7 @@ void scsi_req_continue(SCSIRequest *req)
     if (req->cmd.mode == SCSI_XFER_TO_DEV) {
         req->ops->write_data(req);
     } else {
+        fprintf(stderr, "read data\n");
         req->ops->read_data(req);
     }
 }
@@ -1655,7 +1660,9 @@ void scsi_req_data(SCSIRequest *req, int len)
     assert(req->cmd.mode != SCSI_XFER_NONE);
     if (!req->sg) {
         req->resid -= len;
-        req->bus->info->transfer_data(req, len);
+        fprintf(stderr, "same as read\n");
+//         if(req->cmd.buf[0] == 0x12)
+//             req->bus->info->transfer_data(req, len);
         return;
     }
 

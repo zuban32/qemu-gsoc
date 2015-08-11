@@ -113,6 +113,7 @@ static int cd_read_sector(IDEState *s, int lba, uint8_t *buf, int sector_size)
     case 2048:
         block_acct_start(blk_get_stats(s->blk), &s->acct,
                          4 * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
+        fprintf(stderr, "blk_read: sect = %ld, sct_num = %d\n", (int64_t)lba << 2, 4);
         ret = blk_read(s->blk, (int64_t)lba << 2, buf, 4);
         block_acct_done(blk_get_stats(s->blk), &s->acct);
         break;
@@ -134,6 +135,8 @@ static int cd_read_sector(IDEState *s, int lba, uint8_t *buf, int sector_size)
 
 void ide_atapi_cmd_ok(IDEState *s)
 {
+    fprintf(stderr, "cmd_ok\n");
+    
     s->error = 0;
     s->status = READY_STAT | SEEK_STAT;
     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
@@ -171,13 +174,14 @@ void ide_atapi_io_error(IDEState *s, int ret)
 void ide_atapi_cmd_reply_end(IDEState *s)
 {
     int byte_count_limit, size, ret;
-#ifdef DEBUG_IDE_ATAPI
-    printf("reply: tx_size=%d elem_tx_size=%d index=%d\n",
+// #ifdef DEBUG_IDE_ATAPI
+    fprintf(stderr, "reply: tx_size=%d elem_tx_size=%d index=%d\n",
            s->packet_transfer_size,
            s->elementary_transfer_size,
            s->io_buffer_index);
-#endif
+// #endif
     if (s->packet_transfer_size <= 0) {
+        fprintf(stderr, "end of transfer\n");
         /* end of transfer */
         ide_atapi_cmd_ok(s);
         ide_set_irq(s->bus);
@@ -276,6 +280,11 @@ static void ide_atapi_cmd_read_pio(IDEState *s, int lba, int nb_sectors,
     s->cd_sector_size = sector_size;
 
     s->status = READY_STAT | SEEK_STAT;
+    
+    fprintf(stderr, "ide-bridge transfer: lba = %d, pck_size = %d, el_size = %d, index = %d, sect_size = %d\n",
+        s->lba, s->packet_transfer_size, s->elementary_transfer_size, s->io_buffer_index, s->cd_sector_size
+    );
+    
     ide_atapi_cmd_reply_end(s);
 }
 
@@ -635,6 +644,20 @@ static void cmd_request_sense(IDEState *s, uint8_t *buf)
     ide_atapi_cmd_reply(s, 18, max_len);
 }
 
+// static void inquiry_wrapper(IDEState *s, uint8_t *buf)
+// {
+//     IDEDevice *dev = s->bus->master;
+//     SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
+//     SCSIRequest *req = scsi_req_new(scsi_dev, 0, 0, buf, NULL);
+// 
+//     int max_len = scsi_disk_emulate_inquiry(req, buf);
+//     int idx = 36;
+// 
+//     ide_atapi_cmd_reply(s, idx, max_len);
+// 
+//     return;
+// }
+
 static void cmd_inquiry(IDEState *s, uint8_t *buf)
 {
     uint8_t page_code = buf[2];
@@ -736,6 +759,7 @@ static void cmd_inquiry(IDEState *s, uint8_t *buf)
 
  out:
     buf[size_idx] = idx - preamble_len;
+    fprintf(stderr, "inquiry: reply %d %d\n", idx, max_len);
     ide_atapi_cmd_reply(s, idx, max_len);
     return;
 }
@@ -1055,6 +1079,7 @@ static void cmd_read_toc_pma_atip(IDEState *s, uint8_t* buf)
         ide_atapi_cmd_error(s, ILLEGAL_REQUEST,
                             ASC_INV_FIELD_IN_CMD_PACKET);
     }
+    fprintf(stderr, "read toc: len = %d\n", len);
 }
 
 static void cmd_read_cdvd_capacity(IDEState *s, uint8_t* buf)
@@ -1171,7 +1196,7 @@ enum {
     CHECK_READY = 0x02,
 };
 
-static const struct {
+static const struct ATAPICommand {
     void (*handler)(IDEState *s, uint8_t *buf);
     int flags;
 } atapi_cmd_table[0x100] = {
@@ -1194,11 +1219,19 @@ static const struct {
     [ 0xbd ] = { cmd_mechanism_status,              0 },
     [ 0xbe ] = { cmd_read_cd,                       CHECK_READY },
     /* [1] handler detects and reports not ready condition itself */
-};
+};/*,
+bridge_cmd_table[0x100] = {
+    [0x12] = { inquiry_wrapper,                   ALLOW_UA }
+};*/
 
 void ide_atapi_cmd(IDEState *s)
 {
     uint8_t *buf;
+
+//     const struct ATAPICommand *cmd_table =
+//         (s->drive_kind == IDE_BRIDGE &&
+//         bridge_cmd_table[s->io_buffer[0]].handler) ?
+//             bridge_cmd_table : atapi_cmd_table;
 
     buf = s->io_buffer;
 #ifdef DEBUG_IDE_ATAPI
@@ -1211,6 +1244,9 @@ void ide_atapi_cmd(IDEState *s)
         printf("\n");
     }
 #endif
+
+    fprintf(stderr, "ATAPI: buf[0] = 0x%x\n", buf[0]);
+    fprintf(stdout, "ATAPI: buf[0] = 0x%x\n", buf[0]);
     /*
      * If there's a UNIT_ATTENTION condition pending, only command flagged with
      * ALLOW_UA are allowed to complete. with other commands getting a CHECK
@@ -1229,8 +1265,8 @@ void ide_atapi_cmd(IDEState *s)
      * GET_EVENT_STATUS_NOTIFICATION to detect such tray open/close
      * states rely on this behavior.
      */
-    if (!(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
-        !s->tray_open && blk_is_inserted(s->blk) && s->cdrom_changed) {
+    if ((s->drive_kind != IDE_BRIDGE) && (!(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
+        !s->tray_open && blk_is_inserted(s->blk) && s->cdrom_changed)) {
 
         if (s->cdrom_changed == 1) {
             ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
@@ -1245,15 +1281,29 @@ void ide_atapi_cmd(IDEState *s)
 
     /* Report a Not Ready condition if appropriate for the command */
     if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
-        (!media_present(s) || !blk_is_inserted(s->blk)))
+        (s->drive_kind != IDE_BRIDGE && (!media_present(s) || !blk_is_inserted(s->blk))))
     {
         ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
         return;
     }
-
+    
+//     int cmd = buf[0];
+    
+    if(s->drive_kind == IDE_BRIDGE)
+    {   
+        IDEDevice *dev = s->bus->master;
+        SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
+        s->cur_req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
+        if(scsi_req_enqueue(s->cur_req)) scsi_req_continue(s->cur_req);
+        return;
+    }
+    
     /* Execute the command */
     if (atapi_cmd_table[s->io_buffer[0]].handler) {
-        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);
+        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);    
+//         if(cmd == 0x28)
+//             printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
+
         return;
     }
 

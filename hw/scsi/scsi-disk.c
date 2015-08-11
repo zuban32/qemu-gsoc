@@ -37,6 +37,7 @@ do { printf("scsi-disk: " fmt , ## __VA_ARGS__); } while (0)
 #include "sysemu/blockdev.h"
 #include "hw/block/block.h"
 #include "sysemu/dma.h"
+#include "hw/ide/internal.h"
 
 #ifdef __linux
 #include <scsi/sg.h>
@@ -52,18 +53,6 @@ do { printf("scsi-disk: " fmt , ## __VA_ARGS__); } while (0)
 #define DEFAULT_MAX_IO_SIZE         INT_MAX     /* 2 GB - 1 block */
 
 typedef struct SCSIDiskState SCSIDiskState;
-
-typedef struct SCSIDiskReq {
-    SCSIRequest req;
-    /* Both sector and sector_count are in terms of qemu 512 byte blocks.  */
-    uint64_t sector;
-    uint32_t sector_count;
-    uint32_t buflen;
-    bool started;
-    struct iovec iov;
-    QEMUIOVector qiov;
-    BlockAcctCookie acct;
-} SCSIDiskReq;
 
 #define SCSI_DISK_F_REMOVABLE             0
 #define SCSI_DISK_F_DPOFUA                1
@@ -116,6 +105,9 @@ static uint32_t scsi_init_iovec(SCSIDiskReq *r, size_t size)
         r->buflen = size;
         r->iov.iov_base = blk_blockalign(s->qdev.conf.blk, r->buflen);
     }
+    
+//     int sector_count == MIN(r->sector_count,  128);
+    
     r->iov.iov_len = MIN(r->sector_count * 512, r->buflen);
     qemu_iovec_init_external(&r->qiov, &r->iov, 1);
     return r->qiov.size / 512;
@@ -281,8 +273,14 @@ static void scsi_read_complete(void * opaque, int ret)
     SCSIDiskReq *r = (SCSIDiskReq *)opaque;
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
     int n;
+    
+    uint8_t *buf = r->qiov.iov->iov_base;
+    fprintf(stderr, "buf = 0x%lx\n", (unsigned long)buf);
+    int off = 0;
+    
+    fprintf(stderr, "scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
-    assert(r->req.aiocb != NULL);
+//     assert(r->req.aiocb != NULL);
     r->req.aiocb = NULL;
     block_acct_done(blk_get_stats(s->qdev.conf.blk), &r->acct);
     if (r->req.io_canceled) {
@@ -295,6 +293,8 @@ static void scsi_read_complete(void * opaque, int ret)
             goto done;
         }
     }
+    fprintf(stderr, "qiov.size = %u\n", (unsigned)r->qiov.size);
+
 
     DPRINTF("Data ready tag=0x%x len=%zd\n", r->req.tag, r->qiov.size);
 
@@ -302,9 +302,12 @@ static void scsi_read_complete(void * opaque, int ret)
     r->sector += n;
     r->sector_count -= n;
     scsi_req_data(&r->req, r->qiov.size);
+    fprintf(stderr, "scsi1 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+
 
 done:
     scsi_req_unref(&r->req);
+    scsi_req_complete(&r->req, GOOD);
 }
 
 /* Actually issue a read to the block device.  */
@@ -337,12 +340,20 @@ static void scsi_do_read(void *opaque, int ret)
         r->req.resid -= r->req.sg->size;
         r->req.aiocb = dma_blk_read(s->qdev.conf.blk, r->req.sg, r->sector,
                                     scsi_dma_complete, r);
-    } else {
+    } else {  
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
+        fprintf(stderr, "n = %d\n", n);
+        fprintf(stderr, "scsi: size = %d\n", (unsigned)r->qiov.size);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
                          n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
+        fprintf(stderr, "blk_read: sect = %lu, sct_num = %d\n", r->sector, n);
+        IDEDevice *dev = IDE_DEVICE(r->req.bus->qbus.parent);
+        IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+        IDEState *state = bus->ifs;
+        state->status |= BUSY_STAT;
         r->req.aiocb = blk_aio_readv(s->qdev.conf.blk, r->sector, &r->qiov, n,
                                      scsi_read_complete, r);
+//         scsi_read_complete(opaque, ret);
     }
 
 done:
@@ -357,11 +368,15 @@ static void scsi_read_data(SCSIRequest *req)
     bool first;
 
     DPRINTF("Read sector_count=%d\n", r->sector_count);
+    fprintf(stderr, "sector_count = %d\n", r->sector_count);
     if (r->sector_count == 0) {
         /* This also clears the sense buffer for REQUEST SENSE.  */
         scsi_req_complete(&r->req, GOOD);
         return;
     }
+    
+//     if(r->sector_count == 252)
+//         r->sector_count = 126;
 
     /* No data transfer may already be in progress */
     assert(r->req.aiocb == NULL);
@@ -527,7 +542,7 @@ static uint8_t *scsi_get_buf(SCSIRequest *req)
     return (uint8_t *)r->iov.iov_base;
 }
 
-static int scsi_disk_emulate_inquiry(SCSIRequest *req, uint8_t *outbuf)
+int scsi_disk_emulate_inquiry(SCSIRequest *req, uint8_t *outbuf)
 {
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, req->dev);
     int buflen = 0;
@@ -1192,6 +1207,7 @@ static int mode_sense_page(SCSIDiskState *s, int page, uint8_t **p_outbuf,
 
 static int scsi_disk_emulate_mode_sense(SCSIDiskReq *r, uint8_t *outbuf)
 {
+    fprintf(stderr, "scsi: mode sense\n");
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
     uint64_t nb_sectors;
     bool dbd;
@@ -1358,11 +1374,17 @@ static void scsi_disk_emulate_read_data(SCSIRequest *req)
         r->iov.iov_len = 0;
         r->started = true;
         scsi_req_data(&r->req, buflen);
-        return;
+//         if(req->cmd.buf[0] != INQUIRY && req->cmd.buf[0])
+//             return;
     }
+    uint8_t *buf = r->iov.iov_base;
+    int off = 0;
 
+    scsi_req_unref(req);
+    fprintf(stderr, "emulate - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
     /* This also clears the sense buffer for REQUEST SENSE.  */
     scsi_req_complete(&r->req, GOOD);
+    fprintf(stderr, "Returned from emulate_read_data\n");
 }
 
 static int scsi_disk_check_mode_select(SCSIDiskState *s, int page,
@@ -1800,6 +1822,7 @@ static void scsi_disk_emulate_write_data(SCSIRequest *req)
 
 static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
 {
+    fprintf(stderr, "disk command: 0x%x\n", buf[0]);
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, req->dev);
     uint64_t nb_sectors;
@@ -1825,6 +1848,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     default:
         if (s->tray_open || !blk_is_inserted(s->qdev.conf.blk)) {
             scsi_check_condition(r, SENSE_CODE(NO_MEDIUM));
+//             fprintf(stderr, "no medium\n")
             return 0;
         }
         break;
@@ -1853,6 +1877,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     switch (req->cmd.buf[0]) {
     case TEST_UNIT_READY:
         assert(!s->tray_open && blk_is_inserted(s->qdev.conf.blk));
+        fprintf(stderr, "SCSI: test unit ready\n");
         break;
     case INQUIRY:
         buflen = scsi_disk_emulate_inquiry(req, outbuf);
@@ -2056,6 +2081,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     }
     assert(!r->req.aiocb);
     r->iov.iov_len = MIN(r->buflen, req->cmd.xfer);
+    fprintf(stderr, "iov_len = %u\n", (unsigned)r->iov.iov_len);
     if (r->iov.iov_len == 0) {
         scsi_req_complete(&r->req, GOOD);
     }
@@ -2084,6 +2110,7 @@ illegal_lba:
 
 static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
 {
+    fprintf(stderr, "dma command: 0x%x\n", buf[0]);
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, req->dev);
     uint32_t len;
@@ -2411,20 +2438,34 @@ static const SCSIReqOps *const scsi_disk_reqops_dispatch[256] = {
     [WRITE_VERIFY_16]                 = &scsi_disk_dma_reqops,
 };
 
-static SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
+SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
                                      uint8_t *buf, void *hba_private)
 {
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, d);
+    SCSIDeviceClass *sc = SCSI_DEVICE_GET_CLASS(d);
     SCSIRequest *req;
     const SCSIReqOps *ops;
     uint8_t command;
 
     command = buf[0];
+    fprintf(stderr, "Command = 0x%x\n", command);
     ops = scsi_disk_reqops_dispatch[command];
     if (!ops) {
         ops = &scsi_disk_emulate_reqops;
     }
     req = scsi_req_alloc(ops, &s->qdev, tag, lun, hba_private);
+    memcpy(req->cmd.buf, buf, 16);
+    
+    SCSICommand cmd = { .len = 0 };
+    
+    if (ops != NULL || !sc->parse_cdb) {
+        scsi_req_parse_cdb(d, &cmd, buf);
+    } else {
+        sc->parse_cdb(d, &cmd, buf, hba_private);
+    }
+    
+    req->cmd = cmd;
+    req->resid = req->cmd.xfer;
 
 #ifdef DEBUG_SCSI
     DPRINTF("Command: lun=%d tag=0x%x data=0x%02x", lun, tag, buf[0]);

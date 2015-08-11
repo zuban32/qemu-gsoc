@@ -28,6 +28,124 @@
 
 /* --------------------------------- */
 
+static inline int ube16_to_cpu(const uint8_t *buf)
+{
+    return (buf[0] << 8) | buf[1];
+}
+
+static inline int ube32_to_cpu(const uint8_t *buf)
+{
+    return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
+}
+
+static void ide_bridge_ok(IDEState *s)
+{
+    fprintf(stderr, "bridge_ok\n");
+    //     SCSIRequset *req = s->cur_req;
+    //     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
+    //     qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+//     s->status &= ~BUSY_STAT;
+    ide_atapi_cmd_ok(s);
+    ide_set_irq(s->bus);
+}
+
+static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
+{
+    fprintf(stderr, "bridge transfer\n");
+    
+    IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
+    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+    IDEState *s = bus->ifs;  
+    SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
+    
+    qemu_iovec_concat_iov(&r->qiov, &r->iov, r->iov.iov_len, 0, r->iov.iov_len);
+    
+    qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    fprintf(stderr, "transfer: io_data [%x][%x][%x][%x]\n", s->io_buffer[0], s->io_buffer[1], s->io_buffer[2], s->io_buffer[3]);
+    
+    s->status |= BUSY_STAT;
+    
+    ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);
+}
+
+
+static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
+{
+    fprintf(stderr, "bridge_complete\n");
+//     scsi_req_unref(req);
+    
+    IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
+    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
+    IDEState *s = bus->ifs;  
+    SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
+    
+    int cmd = req->cmd.buf[0];
+   
+    s->status &= ~(BUSY_STAT | DRQ_STAT);
+    fprintf(stderr, "iov.len = %d\n", (int)r->iov.iov_len);
+    
+    if(cmd == READ_10)
+        qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    else if(cmd == INQUIRY || cmd == MODE_SENSE_10 || cmd == READ_TOC || cmd == READ_CAPACITY_10)
+    {
+        switch(cmd) {
+            case INQUIRY:
+                r->iov.iov_len = 36;
+                break;
+            case MODE_SENSE_10:
+                r->iov.iov_len = 30;
+                break;
+            case READ_TOC:
+                r->iov.iov_len = 12;
+                break;
+            case READ_CAPACITY_10:
+                r->iov.iov_len = 8;
+                break;
+            default:
+                break;
+        }
+        
+//         fprintf(stderr, "r->buflen = %d\n", r->buflen);
+        
+        qemu_iovec_concat_iov(&r->qiov, &r->iov, r->iov.iov_len, 0, r->iov.iov_len);
+        
+        qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+        fprintf(stderr, "transfer: io_data [%x][%x][%x][%x]\n", s->io_buffer[0], s->io_buffer[1], s->io_buffer[2], s->io_buffer[3]);
+    }
+    
+    
+    s->status = READY_STAT | SEEK_STAT;
+    s->io_buffer_index = 0;
+    int size = r->qiov.size;
+    
+    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
+    s->lcyl = size;
+    s->hcyl = size >> 8;
+    
+    fprintf(stderr, "r.qiov.size = %d\n", (unsigned)r->qiov.size);
+    
+    printf("bridge_complete: cmd = %x\n", req->cmd.buf[0]);
+    fflush(stdout);
+    
+    if(req->cmd.buf[0] != TEST_UNIT_READY && req->cmd.buf[0] != ALLOW_MEDIUM_REMOVAL) {
+        ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);
+        ide_set_irq(s->bus);
+    }
+    else
+        ide_bridge_ok(s);
+    fprintf(stderr, "return from complete\n");
+}
+
+static const struct SCSIBusInfo atapi_scsi_info = {
+    .tcq = true,
+    .max_target = 0,
+    .max_lun = 0,
+    
+    .transfer_data = ide_bridge_transfer,
+    .complete = ide_bridge_complete,
+    .cancel = NULL
+};
+
 static char *idebus_get_fw_dev_path(DeviceState *dev);
 
 static Property ide_props[] = {
@@ -73,7 +191,7 @@ static int ide_qdev_init(DeviceState *qdev)
     IDEDeviceClass *dc = IDE_DEVICE_GET_CLASS(dev);
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, qdev->parent_bus);
 
-    if (!dev->conf.blk) {
+    if (!dev->conf.blk && dc->parent_class.desc ) {
         error_report("No drive specified");
         goto err;
     }
@@ -170,7 +288,7 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
     }
 
     blkconf_serial(&dev->conf, &dev->serial);
-    if (kind != IDE_CD) {
+    if (kind != IDE_CD && kind != IDE_BRIDGE) {
         blkconf_geometry(&dev->conf, &dev->chs_trans, 65536, 16, 255, &err);
         if (err) {
             error_report_err(err);
@@ -183,6 +301,12 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
                        dev->conf.cyls, dev->conf.heads, dev->conf.secs,
                        dev->chs_trans) < 0) {
         return -1;
+    }
+
+    if (kind == IDE_BRIDGE) {
+        scsi_bus_new(&dev->scsi_bus, sizeof(dev->scsi_bus), &dev->qdev,
+                     &atapi_scsi_info, NULL);
+        scsi_bus_legacy_handle_cmdline(&dev->scsi_bus, NULL);
     }
 
     if (!dev->version) {
@@ -253,6 +377,11 @@ static int ide_cd_initfn(IDEDevice *dev)
     return ide_dev_initfn(dev, IDE_CD);
 }
 
+static int ide_bridge_initfn(IDEDevice *dev)
+{
+    return ide_dev_initfn(dev, IDE_BRIDGE);
+}
+
 static int ide_drive_initfn(IDEDevice *dev)
 {
     DriveInfo *dinfo = blk_legacy_dinfo(dev->conf.blk);
@@ -314,6 +443,23 @@ static const TypeInfo ide_cd_info = {
     .class_init    = ide_cd_class_init,
 };
 
+static void ide_bridge_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    IDEDeviceClass *k = IDE_DEVICE_CLASS(klass);
+    k->init = ide_bridge_initfn;
+    dc->fw_name = "drive";
+    dc->desc = "virtual ATAPI-SCSI bridge";
+    dc->props = ide_cd_properties;
+}
+
+static const TypeInfo ide_bridge_info = {
+    .name          = "ide-bridge",
+    .parent        = TYPE_IDE_DEVICE,
+    .instance_size = sizeof(IDEDrive),
+    .class_init    = ide_bridge_class_init,
+};
+
 static Property ide_drive_properties[] = {
     DEFINE_IDE_DEV_PROPERTIES(),
     DEFINE_PROP_END_OF_LIST(),
@@ -360,6 +506,7 @@ static void ide_register_types(void)
     type_register_static(&ide_bus_info);
     type_register_static(&ide_hd_info);
     type_register_static(&ide_cd_info);
+    type_register_static(&ide_bridge_info);
     type_register_static(&ide_drive_info);
     type_register_static(&ide_device_type_info);
 }

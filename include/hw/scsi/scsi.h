@@ -120,6 +120,20 @@ extern const VMStateDescription vmstate_scsi_device;
     .offset     = vmstate_offset_value(_state, _field, SCSIDevice),  \
 }
 
+#include "block/accounting.h"
+
+typedef struct SCSIDiskReq {
+    SCSIRequest req;
+    /* Both sector and sector_count are in terms of qemu 512 byte blocks.  */
+    uint64_t sector;
+    uint32_t sector_count;
+    uint32_t buflen;
+    bool started;
+    struct iovec iov;
+    QEMUIOVector qiov;
+    BlockAcctCookie acct;
+} SCSIDiskReq;
+
 /* cdrom.c */
 int cdrom_read_toc(int nb_sectors, uint8_t *buf, int msf, int start_track);
 int cdrom_read_toc_raw(int nb_sectors, uint8_t *buf, int msf, int session_num);
@@ -249,6 +263,8 @@ SCSIRequest *scsi_req_alloc(const SCSIReqOps *reqops, SCSIDevice *d,
                             uint32_t tag, uint32_t lun, void *hba_private);
 SCSIRequest *scsi_req_new(SCSIDevice *d, uint32_t tag, uint32_t lun,
                           uint8_t *buf, void *hba_private);
+SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
+                          uint8_t *buf, void *hba_private);
 int32_t scsi_req_enqueue(SCSIRequest *req);
 void scsi_req_free(SCSIRequest *req);
 SCSIRequest *scsi_req_ref(SCSIRequest *req);
@@ -277,5 +293,8 @@ SCSIDevice *scsi_device_find(SCSIBus *bus, int channel, int target, int lun);
 
 /* scsi-generic.c. */
 extern const SCSIReqOps scsi_generic_req_ops;
+
+/* For ide-bridge */
+int scsi_disk_emulate_inquiry(SCSIRequest *req, uint8_t *outbuf);
 
 #endif

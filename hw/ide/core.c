@@ -348,7 +348,7 @@ static void ide_set_signature(IDEState *s)
     /* put signature */
     s->nsector = 1;
     s->sector = 1;
-    if (s->drive_kind == IDE_CD) {
+    if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
         s->lcyl = 0x14;
         s->hcyl = 0xeb;
     } else if (s->blk) {
@@ -468,9 +468,14 @@ static inline void ide_abort_command(IDEState *s)
 void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
                         EndTransferFunc *end_transfer_func)
 {
+    fprintf(stderr, "transfer_start: %d\n", size);
     s->end_transfer_func = end_transfer_func;
     s->data_ptr = buf;
     s->data_end = buf + size;
+    
+    fprintf(stderr, "start: size = %ld\n", s->data_end - s->data_ptr);
+    fprintf(stderr, "status = %x\n", s->status);
+    
     if (!(s->status & ERR_STAT)) {
         s->status |= DRQ_STAT;
     }
@@ -487,11 +492,25 @@ static void ide_cmd_done(IDEState *s)
 }
 
 void ide_transfer_stop(IDEState *s)
-{
+{  
     s->end_transfer_func = ide_transfer_stop;
     s->data_ptr = s->io_buffer;
     s->data_end = s->io_buffer;
     s->status &= ~DRQ_STAT;
+    fprintf(stderr, "transfer_stop\n");
+    int off = 4 * 0;
+//     for(off = 0; off < (2048 / 4) - 1; off += 4)
+    fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0 + off],
+            s->io_buffer[1 + off],s->io_buffer[2 + off],s->io_buffer[3 + off]);
+    fprintf(stderr, "string check: %d\n", strcmp((char*)&s->io_buffer[1], "CD001\001EL TORITO SPECIFICATION"));
+    fprintf(stderr, "IDEState:\nbuf_index = %d\nbuf_len = %d\n", s->io_buffer_index, s->io_buffer_total_len);
+    fprintf(stderr, "nsector = %d\nlcyl = %d, hcyl = %d\nlba = %d\n", s->nsector, s->lcyl, s->hcyl, s->lba);
+    fprintf(stderr, "status = %d\nsector = %d, error = %d\n", s->status, s->error, s->sector);
+    
+    fprintf(stderr, "data_ptr = %p, data_end = %p, io_buffer = %p\n", s->data_ptr, s->data_end, s->io_buffer);
+//     uint8_t *buf = (uint8_t *)s->qiov.iov->iov_base; 
+//     fprintf(stderr, "iov: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]);
+    
     ide_cmd_done(s);
 }
 
@@ -1144,7 +1163,7 @@ static bool cmd_data_set_management(IDEState *s, uint8_t cmd)
 
 static bool cmd_identify(IDEState *s, uint8_t cmd)
 {
-    if (s->blk && s->drive_kind != IDE_CD) {
+    if (s->blk && s->drive_kind != IDE_CD && s->drive_kind != IDE_BRIDGE) {
         if (s->drive_kind != IDE_CFATA) {
             ide_identify(s);
         } else {
@@ -1155,7 +1174,7 @@ static bool cmd_identify(IDEState *s, uint8_t cmd)
         ide_set_irq(s->bus);
         return false;
     } else {
-        if (s->drive_kind == IDE_CD) {
+        if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
             ide_set_signature(s);
         }
         ide_abort_command(s);
@@ -1232,7 +1251,7 @@ static bool cmd_read_pio(IDEState *s, uint8_t cmd)
 {
     bool lba48 = (cmd == WIN_READ_EXT);
 
-    if (s->drive_kind == IDE_CD) {
+    if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
         ide_set_signature(s); /* odd, but ATA4 8.27.5.2 requires it */
         ide_abort_command(s);
         return true;
@@ -1415,6 +1434,7 @@ abort_cmd:
 
 static bool cmd_identify_packet(IDEState *s, uint8_t cmd)
 {
+    fprintf(stderr, "identify packet\n");
     ide_atapi_identify(s);
     s->status = READY_STAT | SEEK_STAT;
     ide_transfer_start(s, s->io_buffer, 512, ide_transfer_stop);
@@ -1426,7 +1446,7 @@ static bool cmd_exec_dev_diagnostic(IDEState *s, uint8_t cmd)
 {
     ide_set_signature(s);
 
-    if (s->drive_kind == IDE_CD) {
+    if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
         s->status = 0; /* ATAPI spec (v6) section 9.10 defines packet
                         * devices to return a clear status register
                         * with READY_STAT *not* set. */
@@ -1454,6 +1474,8 @@ static bool cmd_device_reset(IDEState *s, uint8_t cmd)
 
 static bool cmd_packet(IDEState *s, uint8_t cmd)
 {
+    fprintf(stderr, "cmd_packet: 0x%x\n", cmd);
+    fprintf(stderr, "s->feature = %d\n", s->feature & 1);
     /* overlapping commands not supported */
     if (s->feature & 0x02) {
         ide_abort_command(s);
@@ -1465,6 +1487,8 @@ static bool cmd_packet(IDEState *s, uint8_t cmd)
     s->nsector = 1;
     ide_transfer_start(s, s->io_buffer, ATAPI_PACKET_SIZE,
                        ide_atapi_cmd);
+    fprintf(stderr, "cmd_packet_end: 0x%x\n", cmd);
+    fprintf(stderr, "s->feature = %d\n", s->feature & 1);
     return false;
 }
 
@@ -1731,7 +1755,7 @@ abort_cmd:
 }
 
 #define HD_OK (1u << IDE_HD)
-#define CD_OK (1u << IDE_CD)
+#define CD_OK ((1u << IDE_CD) | (1u << IDE_BRIDGE))
 #define CFA_OK (1u << IDE_CFATA)
 #define HD_CFA_OK (HD_OK | CFA_OK)
 #define ALL_OK (HD_OK | CD_OK | CFA_OK)
@@ -1839,6 +1863,8 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
     s->io_buffer_offset = 0;
 
     complete = ide_cmd_table[val].handler(s, val);
+    fprintf(stderr, "complete = %d\n", complete);
+//     fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0],s->io_buffer[1],s->io_buffer[2],s->io_buffer[3]);
     if (complete) {
         s->status &= ~BUSY_STAT;
         assert(!!s->error == !!(s->status & ERR_STAT));
@@ -1849,17 +1875,20 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
 
         ide_cmd_done(s);
         ide_set_irq(s->bus);
+        
     }
 }
 
 uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
 {
+//     fprintf(stderr, "ide_ioport_read\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint32_t addr;
     int ret, hob;
 
     addr = addr1 & 7;
+//     fprintf(stderr, "addr = %x\n", addr);
     /* FIXME: HOB readback uses bit 7, but it's always set right now */
     //hob = s->select & (1 << 7);
     hob = 0;
@@ -1881,6 +1910,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
+            fprintf(stderr, "nsector\n");
             ret = s->nsector & 0xff;
         } else {
 	    ret = s->hob_nsector;
@@ -1899,6 +1929,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
+            fprintf(stderr, "lcyl\n");
             ret = s->lcyl;
         } else {
 	    ret = s->hob_lcyl;
@@ -1908,7 +1939,10 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
+            fprintf(stderr, "hcyl\n");
             ret = s->hcyl;
+//             if(!ret)
+//                 ret = 0xfc;
         } else {
 	    ret = s->hob_hcyl;
         }
@@ -1931,9 +1965,9 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         qemu_irq_lower(bus->irq);
         break;
     }
-#ifdef DEBUG_IDE
-    printf("ide: read addr=0x%x val=%02x\n", addr1, ret);
-#endif
+    // #ifdef DEBUG_IDE
+    fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
+// #endif
     return ret;
 }
 
@@ -1978,10 +2012,11 @@ void ide_cmd_write(void *opaque, uint32_t addr, uint32_t val)
         /* high to low */
         for(i = 0;i < 2; i++) {
             s = &bus->ifs[i];
-            if (s->drive_kind == IDE_CD)
+            if (s->drive_kind == IDE_CD || s->drive_kind == IDE_BRIDGE) {
                 s->status = 0x00; /* NOTE: READY is _not_ set */
-            else
+            } else {
                 s->status = READY_STAT | SEEK_STAT;
+            }
             ide_set_signature(s);
         }
     }
@@ -2005,11 +2040,12 @@ static bool ide_is_pio_out(IDEState *s)
         return true;
     }
 
-    abort();
+    return true;
 }
 
 void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
 {
+//     fprintf(stderr, "data_writew\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2036,6 +2072,7 @@ void ide_data_writew(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readw(void *opaque, uint32_t addr)
 {
+    fprintf(stderr, "data_readw\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2044,6 +2081,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     /* PIO data access allowed only when DRQ bit is set. The result of a read
      * during PIO in is indeterminate, return 0 and don't move forward. */
     if (!(s->status & DRQ_STAT) || !ide_is_pio_out(s)) {
+        fprintf(stderr, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
         return 0;
     }
 
@@ -2055,15 +2093,23 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     ret = cpu_to_le16(*(uint16_t *)p);
     p += 2;
     s->data_ptr = p;
+// <<<<<<< HEAD
     if (p >= s->data_end) {
         s->status &= ~DRQ_STAT;
         s->end_transfer_func(s);
     }
+// =======
+// //     fprintf(stderr, "end; diff = %ld\n", s->data_end - p);
+//     if (p >= s->data_end)
+//         s->end_transfer_func(s);
+// //     fprintf(stderr, "ret = %d\n", ret);
+// >>>>>>> gsoc-rfc
     return ret;
 }
 
 void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 {
+//     fprintf(stderr, "data_writel\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2090,6 +2136,7 @@ void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readl(void *opaque, uint32_t addr)
 {
+//     fprintf(stderr, "data_readl\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2234,7 +2281,7 @@ static void ide_resize_cb(void *opaque)
         ide_cfata_identify_size(s);
     } else {
         /* IDE_CD uses a different set of callbacks entirely. */
-        assert(s->drive_kind != IDE_CD);
+        assert(s->drive_kind != IDE_CD && s->drive_kind != IDE_BRIDGE);
         ide_identify_size(s);
     }
 }
@@ -2274,7 +2321,7 @@ int ide_init_drive(IDEState *s, BlockBackend *blk, IDEDriveKind kind,
     s->smart_autosave = 1;
     s->smart_errors = 0;
     s->smart_selftest_count = 0;
-    if (kind == IDE_CD) {
+    if (kind == IDE_CD || kind == IDE_BRIDGE) {
         blk_set_dev_ops(blk, &ide_cd_block_ops, s);
         blk_set_guest_block_size(blk, 2048);
     } else {
@@ -2303,6 +2350,9 @@ int ide_init_drive(IDEState *s, BlockBackend *blk, IDEDriveKind kind,
             break;
         case IDE_CFATA:
             strcpy(s->drive_model_str, "QEMU MICRODRIVE");
+            break;
+        case IDE_BRIDGE:
+            strcpy(s->drive_model_str, "QEMU ATAPI-SCSI bridge");
             break;
         default:
             strcpy(s->drive_model_str, "QEMU HARDDISK");
