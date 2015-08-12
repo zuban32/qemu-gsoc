@@ -41,12 +41,36 @@ static inline int ube32_to_cpu(const uint8_t *buf)
 static void ide_bridge_ok(IDEState *s)
 {
     fprintf(stderr, "bridge_ok\n");
-    //     SCSIRequset *req = s->cur_req;
-    //     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
+//         SCSIRequest *req = s->cur_req;
+        SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
+//         
+//         if(r->sector_count)
+//             scsi_do_read(r, 0);
     //     qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
 //     s->status &= ~BUSY_STAT;
-    ide_atapi_cmd_ok(s);
-    ide_set_irq(s->bus);
+    if(r->buflen > 0) {
+        int size = r->buflen;
+        
+        int byte_count_limit = s->lcyl | (s->hcyl << 8);
+        if (byte_count_limit == 0xffff)
+            byte_count_limit--;
+        if (size > byte_count_limit) {
+            /* byte count limit must be even if this case */
+            if (byte_count_limit & 1)
+                byte_count_limit--;
+            size = byte_count_limit;
+        }
+        s->lcyl = size;
+        s->hcyl = size >> 8;
+        
+        ide_transfer_start(s, s->io_buffer + r->qiov.size - r->buflen, size, &ide_bridge_ok);
+        
+        r->buflen -= size;
+        ide_set_irq(s->bus);
+    } else {
+        ide_atapi_cmd_ok(s);
+        ide_set_irq(s->bus);
+    }
 }
 
 static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
@@ -118,9 +142,25 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     s->io_buffer_index = 0;
     int size = r->qiov.size;
     
-    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
+    r->buflen = size;
+    
+    int byte_count_limit = s->lcyl | (s->hcyl << 8);
+    if (byte_count_limit == 0xffff)
+        byte_count_limit--;
+    if (size > byte_count_limit) {
+        /* byte count limit must be even if this case */
+        if (byte_count_limit & 1)
+            byte_count_limit--;
+        size = byte_count_limit;
+    }
     s->lcyl = size;
     s->hcyl = size >> 8;
+    
+    r->buflen -= size;
+        
+    fprintf(stderr, "hcyl = %d\n", s->hcyl);
+    
+    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
     
     fprintf(stderr, "r.qiov.size = %d\n", (unsigned)r->qiov.size);
     
@@ -128,12 +168,11 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     fflush(stdout);
     
     if(req->cmd.buf[0] != TEST_UNIT_READY && req->cmd.buf[0] != ALLOW_MEDIUM_REMOVAL) {
-        ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);
+        ide_transfer_start(s, s->io_buffer, size, &ide_bridge_ok);
         ide_set_irq(s->bus);
     }
     else
         ide_bridge_ok(s);
-    fprintf(stderr, "return from complete\n");
 }
 
 static const struct SCSIBusInfo atapi_scsi_info = {

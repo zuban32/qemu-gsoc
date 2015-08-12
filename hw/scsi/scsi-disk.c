@@ -106,7 +106,7 @@ static uint32_t scsi_init_iovec(SCSIDiskReq *r, size_t size)
         r->iov.iov_base = blk_blockalign(s->qdev.conf.blk, r->buflen);
     }
     
-//     int sector_count == MIN(r->sector_count,  128);
+//     int sector_count = MIN(r->sector_count,  4);
     
     r->iov.iov_len = MIN(r->sector_count * 512, r->buflen);
     qemu_iovec_init_external(&r->qiov, &r->iov, 1);
@@ -306,12 +306,13 @@ static void scsi_read_complete(void * opaque, int ret)
 
 
 done:
-    scsi_req_unref(&r->req);
+    if(!r->sector_count)
+        scsi_req_unref(&r->req);
     scsi_req_complete(&r->req, GOOD);
 }
 
 /* Actually issue a read to the block device.  */
-static void scsi_do_read(void *opaque, int ret)
+void scsi_do_read(void *opaque, int ret)
 {
     SCSIDiskReq *r = opaque;
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
@@ -374,9 +375,6 @@ static void scsi_read_data(SCSIRequest *req)
         scsi_req_complete(&r->req, GOOD);
         return;
     }
-    
-//     if(r->sector_count == 252)
-//         r->sector_count = 126;
 
     /* No data transfer may already be in progress */
     assert(r->req.aiocb == NULL);

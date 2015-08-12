@@ -226,6 +226,7 @@ void ide_atapi_cmd_reply_end(IDEState *s)
                     byte_count_limit--;
                 size = byte_count_limit;
             }
+            fprintf(stderr, "before hcyl: %d\n", size);
             s->lcyl = size;
             s->hcyl = size >> 8;
             s->elementary_transfer_size = size;

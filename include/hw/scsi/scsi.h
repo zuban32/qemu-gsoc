@@ -296,5 +296,6 @@ extern const SCSIReqOps scsi_generic_req_ops;
 
 /* For ide-bridge */
 int scsi_disk_emulate_inquiry(SCSIRequest *req, uint8_t *outbuf);
+void scsi_do_read(void *opaque, int ret);
 
 #endif

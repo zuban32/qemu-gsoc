@@ -186,7 +186,7 @@ static uint64_t portio_read(void *opaque, hwaddr addr, unsigned size)
     const MemoryRegionPortio *mrp = find_portio(mrpio, addr, size, false);
     uint64_t data;
     
-//     fprintf(stderr, "portio_read: %lx, %u\n", addr, size);
+//     fprintf(stdout, "portio_read: %lx, %u\n", addr, size);
 
     data = ((uint64_t)1 << (size * 8)) - 1;
     if (mrp) {

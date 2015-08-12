@@ -499,10 +499,10 @@ void ide_transfer_stop(IDEState *s)
     s->data_end = s->io_buffer;
     s->status &= ~DRQ_STAT;
     fprintf(stderr, "transfer_stop\n");
-    int off = 4 * 0;
-    for(off = 0; off < (2048 / 4) - 1; off += 4)
-    fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0 + off],
-            s->io_buffer[1 + off],s->io_buffer[2 + off],s->io_buffer[3 + off]);
+//     int off = 4 * 0;
+//     for(off = 0; off < (2048 / 4) - 1; off += 4)
+//     fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0 + off],
+//             s->io_buffer[1 + off],s->io_buffer[2 + off],s->io_buffer[3 + off]);
 //     fprintf(stderr, "string check: %d\n", strcmp((char*)&s->io_buffer[1], "CD001\001EL TORITO SPECIFICATION"));
 //     fprintf(stderr, "IDEState:\nbuf_index = %d\nbuf_len = %d\n", s->io_buffer_index, s->io_buffer_total_len);
 //     fprintf(stderr, "nsector = %d\nlcyl = %d, hcyl = %d\nlba = %d\n", s->nsector, s->lcyl, s->hcyl, s->lba);
@@ -1077,7 +1077,7 @@ static void ide_clear_hob(IDEBus *bus)
 void ide_ioport_write(void *opaque, uint32_t addr, uint32_t val)
 {
     IDEBus *bus = opaque;
-    fprintf(stderr, "ioport write\n");
+//     fprintf(stderr, "ioport write\n");
 
 #ifdef DEBUG_IDE
     printf("IDE: write addr=0x%x val=0x%02x\n", addr, val);
@@ -1890,7 +1890,7 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
 
 uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
 {
-    fprintf(stderr, "ide_ioport_read\n");
+//     fprintf(stderr, "ide_ioport_read\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint32_t addr;
@@ -1919,7 +1919,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
-            fprintf(stderr, "nsector\n");
+//             fprintf(stderr, "nsector\n");
             ret = s->nsector & 0xff;
         } else {
 	    ret = s->hob_nsector;
@@ -1938,7 +1938,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
-            fprintf(stderr, "lcyl\n");
+//             fprintf(stderr, "lcyl\n");
             ret = s->lcyl;
         } else {
 	    ret = s->hob_lcyl;
@@ -1948,7 +1948,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         if (!bus->ifs[0].blk && !bus->ifs[1].blk) {
             ret = 0;
         } else if (!hob) {
-            fprintf(stderr, "hcyl\n");
+//             fprintf(stderr, "hcyl\n");
             ret = s->hcyl;
 //             if(!ret)
 //                 ret = 0xfc;
@@ -1975,7 +1975,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         break;
     }
     // #ifdef DEBUG_IDE
-//     fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
+    fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
 // #endif
     return ret;
 }
@@ -2097,7 +2097,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     /* PIO data access allowed only when DRQ bit is set. The result of a read
      * during PIO in is indeterminate, return 0 and don't move forward. */
     if (!(s->status & DRQ_STAT) || !ide_is_pio_out(s)) {
-        fprintf(stderr, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
+        fprintf(stdout, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
         return 0;
     }
 
@@ -2110,7 +2110,8 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     p += 2;
     s->data_ptr = p;
     
-    fprintf(stderr, "read left: %lu\n", s->data_end - s->data_ptr);
+//     fprintf(stdout, "readw left: %lu\n", s->data_end - s->data_ptr);
+        
 // <<<<<<< HEAD
     if (p >= s->data_end) {
         s->status &= ~DRQ_STAT;

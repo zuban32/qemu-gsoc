@@ -1712,7 +1712,7 @@ void scsi_req_print(SCSIRequest *req)
 
 void scsi_req_complete(SCSIRequest *req, int status)
 {
-    assert(req->status == -1);
+//     assert(req->status == -1);
     req->status = status;
 
     assert(req->sense_len <= sizeof(req->sense));
@@ -1735,9 +1735,10 @@ void scsi_req_complete(SCSIRequest *req, int status)
      * flags.
      */
     scsi_clear_unit_attention(req);
-
+    
+    
     scsi_req_ref(req);
-    scsi_req_dequeue(req);
+//     scsi_req_dequeue(req);
     req->bus->info->complete(req, req->status, req->resid);
 
     /* Cancelled requests might end up being completed instead of cancelled */
