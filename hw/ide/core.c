@@ -2097,7 +2097,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     /* PIO data access allowed only when DRQ bit is set. The result of a read
      * during PIO in is indeterminate, return 0 and don't move forward. */
     if (!(s->status & DRQ_STAT) || !ide_is_pio_out(s)) {
-        fprintf(stdout, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
+//         fprintf(stdout, "pio is set: %d %d\n", s->status & DRQ_STAT, ide_is_pio_out(s));
         return 0;
     }
 
@@ -2111,18 +2111,11 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     s->data_ptr = p;
     
 //     fprintf(stdout, "readw left: %lu\n", s->data_end - s->data_ptr);
-        
-// <<<<<<< HEAD
+    
     if (p >= s->data_end) {
         s->status &= ~DRQ_STAT;
         s->end_transfer_func(s);
     }
-// =======
-// //     fprintf(stderr, "end; diff = %ld\n", s->data_end - p);
-//     if (p >= s->data_end)
-//         s->end_transfer_func(s);
-// //     fprintf(stderr, "ret = %d\n", ret);
-// >>>>>>> gsoc-rfc
     return ret;
 }
 

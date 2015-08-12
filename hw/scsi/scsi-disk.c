@@ -106,8 +106,6 @@ static uint32_t scsi_init_iovec(SCSIDiskReq *r, size_t size)
         r->iov.iov_base = blk_blockalign(s->qdev.conf.blk, r->buflen);
     }
     
-//     int sector_count = MIN(r->sector_count,  4);
-    
     r->iov.iov_len = MIN(r->sector_count * 512, r->buflen);
     qemu_iovec_init_external(&r->qiov, &r->iov, 1);
     return r->qiov.size / 512;
@@ -280,7 +278,7 @@ static void scsi_read_complete(void * opaque, int ret)
     
     fprintf(stderr, "scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
-//     assert(r->req.aiocb != NULL);
+    assert(r->req.aiocb != NULL);
     r->req.aiocb = NULL;
     block_acct_done(blk_get_stats(s->qdev.conf.blk), &r->acct);
     if (r->req.io_canceled) {
@@ -302,13 +300,14 @@ static void scsi_read_complete(void * opaque, int ret)
     r->sector += n;
     r->sector_count -= n;
     scsi_req_data(&r->req, r->qiov.size);
-    fprintf(stderr, "scsi1 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+//     fprintf(stderr, "scsi1 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
 
 done:
+    scsi_req_unref(&r->req);
+    
     if(!r->sector_count)
-        scsi_req_unref(&r->req);
-    scsi_req_complete(&r->req, GOOD);
+        scsi_req_complete(&r->req, GOOD);
 }
 
 /* Actually issue a read to the block device.  */
@@ -343,8 +342,6 @@ void scsi_do_read(void *opaque, int ret)
                                     scsi_dma_complete, r);
     } else {  
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
-        fprintf(stderr, "n = %d\n", n);
-        fprintf(stderr, "scsi: size = %d\n", (unsigned)r->qiov.size);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
                          n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
         fprintf(stderr, "blk_read: sect = %lu, sct_num = %d\n", r->sector, n);
@@ -354,7 +351,6 @@ void scsi_do_read(void *opaque, int ret)
         state->status |= BUSY_STAT;
         r->req.aiocb = blk_aio_readv(s->qdev.conf.blk, r->sector, &r->qiov, n,
                                      scsi_read_complete, r);
-//         scsi_read_complete(opaque, ret);
     }
 
 done:
@@ -369,7 +365,6 @@ static void scsi_read_data(SCSIRequest *req)
     bool first;
 
     DPRINTF("Read sector_count=%d\n", r->sector_count);
-    fprintf(stderr, "sector_count = %d\n", r->sector_count);
     if (r->sector_count == 0) {
         /* This also clears the sense buffer for REQUEST SENSE.  */
         scsi_req_complete(&r->req, GOOD);

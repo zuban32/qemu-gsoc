@@ -41,13 +41,8 @@ static inline int ube32_to_cpu(const uint8_t *buf)
 static void ide_bridge_ok(IDEState *s)
 {
     fprintf(stderr, "bridge_ok\n");
-//         SCSIRequest *req = s->cur_req;
-        SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
-//         
-//         if(r->sector_count)
-//             scsi_do_read(r, 0);
-    //     qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
-//     s->status &= ~BUSY_STAT;
+    
+    SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
     if(r->buflen > 0) {
         int size = r->buflen;
         
@@ -73,30 +68,15 @@ static void ide_bridge_ok(IDEState *s)
     }
 }
 
+// Only for other SCSI device compatibility
 static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
 {
-    fprintf(stderr, "bridge transfer\n");
-    
-    IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
-    IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
-    IDEState *s = bus->ifs;  
-    SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
-    
-    qemu_iovec_concat_iov(&r->qiov, &r->iov, r->iov.iov_len, 0, r->iov.iov_len);
-    
-    qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
-    fprintf(stderr, "transfer: io_data [%x][%x][%x][%x]\n", s->io_buffer[0], s->io_buffer[1], s->io_buffer[2], s->io_buffer[3]);
-    
-    s->status |= BUSY_STAT;
-    
-    ide_transfer_start(s, s->io_buffer, r->qiov.size, &ide_bridge_ok);
 }
 
 
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
     fprintf(stderr, "bridge_complete\n");
-//     scsi_req_unref(req);
     
     IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
@@ -154,11 +134,8 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
         size = byte_count_limit;
     }
     s->lcyl = size;
-    s->hcyl = size >> 8;
-    
+    s->hcyl = size >> 8;    
     r->buflen -= size;
-        
-    fprintf(stderr, "hcyl = %d\n", s->hcyl);
     
     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
     
