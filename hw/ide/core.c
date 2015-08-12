@@ -2109,6 +2109,8 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
     ret = cpu_to_le16(*(uint16_t *)p);
     p += 2;
     s->data_ptr = p;
+    
+    fprintf(stderr, "read left: %lu\n", s->data_end - s->data_ptr);
 // <<<<<<< HEAD
     if (p >= s->data_end) {
         s->status &= ~DRQ_STAT;
