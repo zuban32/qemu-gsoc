@@ -691,8 +691,9 @@ static void test_cdrom_dma(void)
     PrdtEntry prdt[1];
     FILE *fh;
 
-    ide_test_start("-drive file=%s,if=ide,media=cdrom,cache=writeback,format=raw", tmp_path);
+//     ide_test_start("-drive file=%s,if=ide,media=cdrom,cache=writeback,format=raw", tmp_path);
 //     ide_test_start("-drive if=none,file=%s,id=cdrom -drive if=none,id=fake -device ide-bridge,id=bridge,drive=fake -device scsi-cd,drive=cdrom,bus=bridge.0", tmp_path);
+    ide_test_start("-cdrom %s", tmp_path);
     
     qtest_irq_intercept_in(global_qtest, "ioapic");
 
