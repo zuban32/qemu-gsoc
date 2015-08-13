@@ -304,6 +304,7 @@ static void ide_atapi_cmd_check_status(IDEState *s)
 /* XXX: handle read errors */
 static void ide_atapi_cmd_read_dma_cb(void *opaque, int ret)
 {
+    fprintf(stderr, "read_dma_cb\n");
     IDEState *s = opaque;
     int data_offset, n;
 
@@ -330,13 +331,15 @@ static void ide_atapi_cmd_read_dma_cb(void *opaque, int ret)
             s->lba += n;
         }
         s->packet_transfer_size -= s->io_buffer_size;
+        fprintf(stderr, "rw_buf is called\n");
         if (s->bus->dma->ops->rw_buf(s->bus->dma, 1) == 0)
             goto eot;
     }
 
     if (s->packet_transfer_size <= 0) {
-        s->status = READY_STAT | SEEK_STAT;
+//         s->status = READY_STAT | SEEK_STAT;
         s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
+        fprintf(stderr, "IRQ\n");
         ide_set_irq(s->bus);
         goto eot;
     }
@@ -360,13 +363,14 @@ static void ide_atapi_cmd_read_dma_cb(void *opaque, int ret)
     s->bus->dma->iov.iov_base = (void *)(s->io_buffer + data_offset);
     s->bus->dma->iov.iov_len = n * 4 * 512;
     qemu_iovec_init_external(&s->bus->dma->qiov, &s->bus->dma->iov, 1);
-
+    fprintf(stderr, "dma: aio_read\n");
     s->bus->dma->aiocb = blk_aio_readv(s->blk, (int64_t)s->lba << 2,
                                        &s->bus->dma->qiov, n * 4,
                                        ide_atapi_cmd_read_dma_cb, s);
     return;
 
 eot:
+fprintf(stderr, "End of transfer - DMA\n");
     block_acct_done(blk_get_stats(s->blk), &s->acct);
     ide_set_inactive(s, false);
 }
@@ -1308,6 +1312,7 @@ void ide_atapi_cmd(IDEState *s)
         SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
         s->cur_req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
         if(scsi_req_enqueue(s->cur_req)) scsi_req_continue(s->cur_req);
+        fprintf(stderr, "returned from atapi\n");
         return;
     }
     

@@ -43,7 +43,7 @@
 #define IDE_PCI_FUNC    1
 
 #define IDE_BASE 0x170
-#define IDE_PRIMARY_IRQ 14
+#define IDE_PRIMARY_IRQ 15
 
 #define ATAPI_BLOCK_SIZE 2048
 
@@ -156,6 +156,7 @@ static QPCIDevice *get_pci_device(uint16_t *bmdma_base)
 
     /* Map bmdma BAR */
     *bmdma_base = (uint16_t)(uintptr_t) qpci_iomap(dev, 4, NULL);
+    * bmdma_base += 8;
 
     qpci_device_enable(dev);
 
@@ -250,6 +251,7 @@ static int send_dma_request(int cmd, uint64_t sector, int nb_sectors,
     /* Wait for the DMA transfer to complete */
     do {
         status = inb(bmdma_base + bmreg_status);
+//         printf("Waiting: status = %u, res = %u, shouldn't be: %u\n", status, status & (BM_STS_ACTIVE | BM_STS_INTR), BM_STS_ACTIVE);
     } while ((status & (BM_STS_ACTIVE | BM_STS_INTR)) == BM_STS_ACTIVE);
 
     g_assert_cmpint(get_irq(IDE_PRIMARY_IRQ), ==, !!(status & BM_STS_INTR));
@@ -625,7 +627,7 @@ static void send_scsi_cdb_read10(uint32_t lba, uint16_t nblocks)
         outw(IDE_BASE + reg_data, ((uint16_t *)&pkt)[i]);
     }
 }
-// 
+
 // static void test_cdrom_pio(void)
 // {
 //     FILE *fh;
@@ -685,15 +687,14 @@ static void read10_single_sector(void)
 static void test_cdrom_dma(void)
 {
     static const size_t len = ATAPI_BLOCK_SIZE;
-    char *pattern = g_malloc(ATAPI_BLOCK_SIZE * 16);
-    char *rx = g_malloc0(len);
+    uint8_t *pattern = g_malloc(ATAPI_BLOCK_SIZE * 16);
+    uint8_t *rx = g_malloc0(len);
     uintptr_t guest_buf;
     PrdtEntry prdt[1];
     FILE *fh;
 
 //     ide_test_start("-drive file=%s,if=ide,media=cdrom,cache=writeback,format=raw", tmp_path);
-//     ide_test_start("-drive if=none,file=%s,id=cdrom -drive if=none,id=fake -device ide-bridge,id=bridge,drive=fake -device scsi-cd,drive=cdrom,bus=bridge.0", tmp_path);
-    ide_test_start("-cdrom %s", tmp_path);
+    ide_test_start("-drive if=none,file=%s,id=cdrom -drive if=none,id=fake -device ide-bridge,id=bridge,drive=fake -device scsi-cd,drive=cdrom,bus=bridge.0", tmp_path);
     
     qtest_irq_intercept_in(global_qtest, "ioapic");
 
@@ -712,6 +713,22 @@ static void test_cdrom_dma(void)
 
     /* Read back data from guest memory into local qtest memory */
     memread(guest_buf, rx, len);
+    
+    int size = 16, j;
+        for(j = 0; j < size; j++)
+        {
+            fprintf(stderr, "[%x]", rx[j]);
+            if(j % 8 == 7)
+                fprintf(stderr, "\n");
+        }
+        fprintf(stderr, "-----------\n");
+        for(j = 0; j < size; j++)
+        {
+            fprintf(stderr, "[%x]", pattern[j]);
+            if(j % 8 == 7)
+                fprintf(stderr, "\n");
+        }
+    
     g_assert_cmpint(memcmp(pattern, rx, len), ==, 0);
 
     g_free(pattern);

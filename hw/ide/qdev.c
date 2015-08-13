@@ -75,6 +75,25 @@ static void ide_bridge_transfer(SCSIRequest *req, uint32_t len)
 {
 }
 
+static void ide_bridge_dma_complete(void *opaque, int ret)
+{
+    IDEState *s = opaque;
+    
+    fprintf(stderr, "Finishing DMA transfer\nGot data:\n");
+    int i = 0;
+    for(i = 0; i < 16; i++) {
+        fprintf(stderr, "[%x]", ((uint8_t *)s->io_buffer)[i]);
+        if(i % 8 == 7) fprintf(stderr, "\n");
+    }
+    s->bus->dma->iov.iov_base = (void *)(s->io_buffer);
+    s->bus->dma->iov.iov_len = 1 * 4 * 512;
+    s->io_buffer_size = 2048;
+    s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
+    s->bus->dma->ops->rw_buf(s->bus->dma, 1);
+    
+    ide_set_irq(s->bus);
+    ide_set_inactive(s, false);
+}
 
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
@@ -88,8 +107,15 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     int cmd = req->cmd.buf[0];
     fprintf(stderr, "iov.len = %d\n", (int)r->iov.iov_len);
     
-    if(cmd == READ_10)
-        qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+    if(cmd == READ_10) {
+        if(s->feature & 0x1) {
+            qemu_iovec_clone(&s->bus->dma->qiov, &r->qiov, NULL);
+            qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+            fprintf(stderr, "DMA complete\n");
+        } else {
+            qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
+        }
+    }
     else if(cmd == INQUIRY || cmd == MODE_SENSE_10 || cmd == READ_TOC ||
         cmd == READ_CAPACITY_10 || cmd == GET_CONFIGURATION)
     {
@@ -137,20 +163,36 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
             byte_count_limit--;
         size = byte_count_limit;
     }
+    if(!(s->feature & 1)) {
     s->lcyl = size;
     s->hcyl = size >> 8;    
     r->buflen -= size;
     
     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
-    
+    }
     fprintf(stderr, "r.qiov.size = %d\n", (unsigned)r->qiov.size);
     
     printf("bridge_complete: cmd = %x\n", req->cmd.buf[0]);
     fflush(stdout);
     
     if(req->cmd.buf[0] != TEST_UNIT_READY && req->cmd.buf[0] != ALLOW_MEDIUM_REMOVAL) {
+        if(s->feature & 0x1) {
+            
+            fprintf(stderr, "DMA started\n");
+            s->io_buffer_index = 0;
+            s->bus->retry_unit = s->unit;
+            s->bus->retry_sector_num = ide_get_sector(s);
+            s->bus->retry_nsector = s->nsector;
+            
+            if (s->bus->dma->ops->start_dma) {
+                s->bus->dma->ops->start_dma(s->bus->dma, s, ide_bridge_dma_complete);
+            }
+            return;
+        }
+        else {
         ide_transfer_start(s, s->io_buffer, size, &ide_bridge_ok);
         ide_set_irq(s->bus);
+        }
     }
     else
         ide_bridge_ok(s);

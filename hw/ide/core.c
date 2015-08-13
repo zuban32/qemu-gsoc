@@ -488,6 +488,7 @@ void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
 static void ide_cmd_done(IDEState *s)
 {
     if (s->bus->dma->ops->cmd_done) {
+        fprintf(stderr, "cmd_done exists\n");
         s->bus->dma->ops->cmd_done(s->bus->dma);
     }
 }
@@ -827,7 +828,7 @@ void ide_start_dma(IDEState *s, BlockCompletionFunc *cb)
     s->bus->retry_sector_num = ide_get_sector(s);
     s->bus->retry_nsector = s->nsector;
     if (s->bus->dma->ops->start_dma) {
-        printf("start_dma\n");
+        printf("start_dma func exists\n");
         s->bus->dma->ops->start_dma(s->bus->dma, s, cb);
     }
 }
@@ -1488,6 +1489,7 @@ static bool cmd_packet(IDEState *s, uint8_t cmd)
     }
 
     s->status = READY_STAT | SEEK_STAT;
+//     s->feature |= 1;
     s->atapi_dma = s->feature & 1;
     s->nsector = 1;
     ide_transfer_start(s, s->io_buffer, ATAPI_PACKET_SIZE,
