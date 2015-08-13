@@ -468,18 +468,18 @@ static inline void ide_abort_command(IDEState *s)
 void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
                         EndTransferFunc *end_transfer_func)
 {
-    fprintf(stderr, "transfer_start: %d\n", size);
+//     fprintf(stderr, "transfer_start: %d\n", size);
     s->end_transfer_func = end_transfer_func;
-    fprintf(stderr, "transfer_func = %p\n", s->end_transfer_func);
+//     fprintf(stderr, "transfer_func = %p\n", s->end_transfer_func);
     s->data_ptr = buf;
     s->data_end = buf + size;
     
-    fprintf(stderr, "start: size = %ld\n", s->data_end - s->data_ptr);
+//     fprintf(stderr, "start: size = %ld\n", s->data_end - s->data_ptr);
     
     if (!(s->status & ERR_STAT)) {
         s->status |= DRQ_STAT;
     }
-    fprintf(stderr, "status = %x\n", s->status);
+//     fprintf(stderr, "status = %x\n", s->status);
     if (s->bus->dma->ops->start_transfer) {
         s->bus->dma->ops->start_transfer(s->bus->dma);
     }
@@ -488,7 +488,7 @@ void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
 static void ide_cmd_done(IDEState *s)
 {
     if (s->bus->dma->ops->cmd_done) {
-        fprintf(stderr, "cmd_done exists\n");
+//         fprintf(stderr, "cmd_done exists\n");
         s->bus->dma->ops->cmd_done(s->bus->dma);
     }
 }
@@ -499,7 +499,7 @@ void ide_transfer_stop(IDEState *s)
     s->data_ptr = s->io_buffer;
     s->data_end = s->io_buffer;
     s->status &= ~DRQ_STAT;
-    fprintf(stderr, "transfer_stop\n");
+//     fprintf(stderr, "transfer_stop\n");
 //     int off = 4 * 0;
 //     for(off = 0; off < (2048 / 4) - 1; off += 4)
 //     fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0 + off],
@@ -1979,7 +1979,7 @@ uint32_t ide_ioport_read(void *opaque, uint32_t addr1)
         break;
     }
     // #ifdef DEBUG_IDE
-    fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
+//     fprintf(stderr,"ide: read addr=0x%x val=%02x\n", addr1, ret);
 // #endif
     return ret;
 }
@@ -2125,7 +2125,7 @@ uint32_t ide_data_readw(void *opaque, uint32_t addr)
 
 void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 {
-    fprintf(stderr, "data_writel\n");
+//     fprintf(stderr, "data_writel\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;
@@ -2152,7 +2152,7 @@ void ide_data_writel(void *opaque, uint32_t addr, uint32_t val)
 
 uint32_t ide_data_readl(void *opaque, uint32_t addr)
 {
-    fprintf(stderr, "data_readl\n");
+//     fprintf(stderr, "data_readl\n");
     IDEBus *bus = opaque;
     IDEState *s = idebus_active_if(bus);
     uint8_t *p;

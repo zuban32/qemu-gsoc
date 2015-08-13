@@ -11,7 +11,9 @@ if [[ $1 -eq 0 ]]; then
 	2> ~/ide_bridge
 else
 	qemu-system-i386 \
-	-cdrom ~/Downloads/dsl.iso \
+	-cdrom ~/Downloads/fedora.iso \
 	-chardev stdio,id=seabios -device isa-debugcon,iobase=0x402,chardev=seabios \
+	-hda diskimage \
+	-m 1024 \
 	2> ~/read_pio
 fi

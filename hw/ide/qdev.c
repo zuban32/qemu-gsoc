@@ -40,7 +40,7 @@ static inline int ube32_to_cpu(const uint8_t *buf)
 
 static void ide_bridge_ok(IDEState *s)
 {
-    fprintf(stderr, "bridge_ok\n");
+//     fprintf(stderr, "bridge_ok\n");
     s->status = READY_STAT | SEEK_STAT;
 
     
@@ -85,8 +85,6 @@ static void ide_bridge_dma_complete(void *opaque, int ret)
         fprintf(stderr, "[%x]", ((uint8_t *)s->io_buffer)[i]);
         if(i % 8 == 7) fprintf(stderr, "\n");
     }
-    s->bus->dma->iov.iov_base = (void *)(s->io_buffer);
-    s->bus->dma->iov.iov_len = 1 * 4 * 512;
     s->io_buffer_size = 2048;
     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
     s->bus->dma->ops->rw_buf(s->bus->dma, 1);
@@ -97,7 +95,7 @@ static void ide_bridge_dma_complete(void *opaque, int ret)
 
 static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
 {
-    fprintf(stderr, "bridge_complete\n");
+//     fprintf(stderr, "bridge_complete\n");
     
     IDEDevice *dev = IDE_DEVICE(req->bus->qbus.parent);
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
@@ -105,13 +103,13 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     
     int cmd = req->cmd.buf[0];
-    fprintf(stderr, "iov.len = %d\n", (int)r->iov.iov_len);
+//     fprintf(stderr, "iov.len = %d\n", (int)r->iov.iov_len);
     
     if(cmd == READ_10) {
         if(s->feature & 0x1) {
             qemu_iovec_clone(&s->bus->dma->qiov, &r->qiov, NULL);
             qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
-            fprintf(stderr, "DMA complete\n");
+//             fprintf(stderr, "DMA complete\n");
         } else {
             qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
         }
@@ -135,6 +133,9 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
             case GET_CONFIGURATION:
                 r->iov.iov_len = 40;
                 break;
+            case GET_EVENT_STATUS_NOTIFICATION:
+                r->iov.iov_len = 8;
+                break;
             default:
                 break;
         }
@@ -144,7 +145,7 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
         qemu_iovec_concat_iov(&r->qiov, &r->iov, r->iov.iov_len, 0, r->iov.iov_len);
         
         qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
-        fprintf(stderr, "transfer: io_data [%x][%x][%x][%x]\n", s->io_buffer[0], s->io_buffer[1], s->io_buffer[2], s->io_buffer[3]);
+//         fprintf(stderr, "transfer: io_data [%x][%x][%x][%x]\n", s->io_buffer[0], s->io_buffer[1], s->io_buffer[2], s->io_buffer[3]);
     }
     
     
@@ -183,6 +184,10 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
             s->bus->retry_unit = s->unit;
             s->bus->retry_sector_num = ide_get_sector(s);
             s->bus->retry_nsector = s->nsector;
+            
+           
+            s->bus->dma->iov.iov_base = (void *)(s->io_buffer);
+            s->bus->dma->iov.iov_len = r->qiov.size;
             
             if (s->bus->dma->ops->start_dma) {
                 s->bus->dma->ops->start_dma(s->bus->dma, s, ide_bridge_dma_complete);

@@ -979,6 +979,7 @@ static int scsi_get_event_status_notification(SCSIDiskState *s, SCSIDiskReq *r,
         outbuf[2] = 0x80;
     }
     stw_be_p(outbuf, size - 4);
+    fprintf(stderr, "event returning: %d\n", size);
     return size;
 }
 
