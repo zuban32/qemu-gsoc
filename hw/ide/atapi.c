@@ -1283,7 +1283,13 @@ void ide_atapi_cmd(IDEState *s)
 
         return;
     }
-
+    
+    char res1 = s->drive_kind != IDE_BRIDGE;
+    char res2 = media_present(s);
+    char res3 = blk_is_inserted(s->blk);
+    
+    fprintf(stderr, "ATAPI: checking ready - %d %d %d, total = %d\n", res1, res2, res3, res1 && (!res2 || !res3));
+    
     /* Report a Not Ready condition if appropriate for the command */
     if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
         (s->drive_kind != IDE_BRIDGE && (!media_present(s) || !blk_is_inserted(s->blk))))

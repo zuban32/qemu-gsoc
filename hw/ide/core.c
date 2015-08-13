@@ -2335,14 +2335,19 @@ int ide_init_drive(IDEState *s, BlockBackend *blk, IDEDriveKind kind,
     s->smart_autosave = 1;
     s->smart_errors = 0;
     s->smart_selftest_count = 0;
+    
     if (kind == IDE_CD || kind == IDE_BRIDGE) {
         blk_set_dev_ops(blk, &ide_cd_block_ops, s);
         blk_set_guest_block_size(blk, 2048);
+        
+        fprintf(stderr, "blk is inserted: %d\n", blk_is_inserted(s->blk));
+        
     } else {
         if (!blk_is_inserted(s->blk)) {
             error_report("Device needs media, but drive is empty");
             return -1;
         }
+        else
         if (blk_is_read_only(blk)) {
             error_report("Can't use a read-only drive");
             return -1;
