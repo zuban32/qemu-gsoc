@@ -821,11 +821,13 @@ static void ide_sector_start_dma(IDEState *s, enum ide_dma_cmd dma_cmd)
 
 void ide_start_dma(IDEState *s, BlockCompletionFunc *cb)
 {
+    fprintf(stderr, "DMA started\n");
     s->io_buffer_index = 0;
     s->bus->retry_unit = s->unit;
     s->bus->retry_sector_num = ide_get_sector(s);
     s->bus->retry_nsector = s->nsector;
     if (s->bus->dma->ops->start_dma) {
+        printf("start_dma\n");
         s->bus->dma->ops->start_dma(s->bus->dma, s, cb);
     }
 }

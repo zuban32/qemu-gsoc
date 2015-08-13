@@ -936,7 +936,9 @@ static void cmd_prevent_allow_medium_removal(IDEState *s, uint8_t* buf)
 static void cmd_read(IDEState *s, uint8_t* buf)
 {
     int nb_sectors, lba;
-
+    
+    fprintf(stderr, "cmd read\n");
+    
     if (buf[0] == GPCMD_READ_10) {
         nb_sectors = ube16_to_cpu(buf + 7);
     } else {
@@ -1257,6 +1259,7 @@ void ide_atapi_cmd(IDEState *s)
     if (s->sense_key == UNIT_ATTENTION &&
         !(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA)) {
         ide_atapi_cmd_check_status(s);
+    fprintf(stderr, "return 1\n");
         return;
     }
     /*
@@ -1276,6 +1279,7 @@ void ide_atapi_cmd(IDEState *s)
             ide_atapi_cmd_error(s, UNIT_ATTENTION, ASC_MEDIUM_MAY_HAVE_CHANGED);
             s->cdrom_changed = 0;
         }
+    fprintf(stderr, "return 2\n");
 
         return;
     }
@@ -1285,6 +1289,8 @@ void ide_atapi_cmd(IDEState *s)
         (s->drive_kind != IDE_BRIDGE && (!media_present(s) || !blk_is_inserted(s->blk))))
     {
         ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+            fprintf(stderr, "return 3\n");
+
         return;
     }
     

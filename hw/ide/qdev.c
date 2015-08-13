@@ -41,6 +41,8 @@ static inline int ube32_to_cpu(const uint8_t *buf)
 static void ide_bridge_ok(IDEState *s)
 {
     fprintf(stderr, "bridge_ok\n");
+    s->status = READY_STAT | SEEK_STAT;
+
     
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
     if(r->buflen > 0) {
@@ -84,13 +86,12 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     
     int cmd = req->cmd.buf[0];
-   
-    s->status &= ~(BUSY_STAT | DRQ_STAT);
     fprintf(stderr, "iov.len = %d\n", (int)r->iov.iov_len);
     
     if(cmd == READ_10)
         qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);
-    else if(cmd == INQUIRY || cmd == MODE_SENSE_10 || cmd == READ_TOC || cmd == READ_CAPACITY_10)
+    else if(cmd == INQUIRY || cmd == MODE_SENSE_10 || cmd == READ_TOC ||
+        cmd == READ_CAPACITY_10 || cmd == GET_CONFIGURATION)
     {
         switch(cmd) {
             case INQUIRY:
@@ -104,6 +105,9 @@ static void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid)
                 break;
             case READ_CAPACITY_10:
                 r->iov.iov_len = 8;
+                break;
+            case GET_CONFIGURATION:
+                r->iov.iov_len = 40;
                 break;
             default:
                 break;
