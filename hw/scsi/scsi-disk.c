@@ -272,11 +272,11 @@ static void scsi_read_complete(void * opaque, int ret)
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
     int n;
     
-    uint8_t *buf = r->qiov.iov->iov_base;
-    fprintf(stderr, "buf = 0x%lx\n", (unsigned long)buf);
-    int off = 0;
+//     uint8_t *buf = r->qiov.iov->iov_base;
+//     fprintf(stderr, "buf = 0x%lx\n", (unsigned long)buf);
+//     int off = 0;
     
-    fprintf(stderr, "scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+//     fprintf(stderr, "scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
     assert(r->req.aiocb != NULL);
     r->req.aiocb = NULL;
@@ -291,7 +291,7 @@ static void scsi_read_complete(void * opaque, int ret)
             goto done;
         }
     }
-    fprintf(stderr, "qiov.size = %u\n", (unsigned)r->qiov.size);
+//     fprintf(stderr, "qiov.size = %u\n", (unsigned)r->qiov.size);
 
 
     DPRINTF("Data ready tag=0x%x len=%zd\n", r->req.tag, r->qiov.size);
@@ -344,7 +344,7 @@ void scsi_do_read(void *opaque, int ret)
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
                          n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
-        fprintf(stderr, "blk_read: sect = %lu, sct_num = %d\n", r->sector, n);
+//         fprintf(stderr, "blk_read: sect = %lu, sct_num = %d\n", r->sector, n);
         IDEDevice *dev = IDE_DEVICE(r->req.bus->qbus.parent);
         IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
         IDEState *state = bus->ifs;
@@ -979,7 +979,7 @@ static int scsi_get_event_status_notification(SCSIDiskState *s, SCSIDiskReq *r,
         outbuf[2] = 0x80;
     }
     stw_be_p(outbuf, size - 4);
-    fprintf(stderr, "event returning: %d\n", size);
+//     fprintf(stderr, "event returning: %d\n", size);
     return size;
 }
 
@@ -1201,7 +1201,7 @@ static int mode_sense_page(SCSIDiskState *s, int page, uint8_t **p_outbuf,
 
 static int scsi_disk_emulate_mode_sense(SCSIDiskReq *r, uint8_t *outbuf)
 {
-    fprintf(stderr, "scsi: mode sense\n");
+//     fprintf(stderr, "scsi: mode sense\n");
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
     uint64_t nb_sectors;
     bool dbd;
@@ -1371,14 +1371,14 @@ static void scsi_disk_emulate_read_data(SCSIRequest *req)
 //         if(req->cmd.buf[0] != INQUIRY && req->cmd.buf[0])
 //             return;
     }
-    uint8_t *buf = r->iov.iov_base;
-    int off = 0;
+//     uint8_t *buf = r->iov.iov_base;
+//     int off = 0;
 
     scsi_req_unref(req);
-    fprintf(stderr, "emulate - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
+//     fprintf(stderr, "emulate - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
     /* This also clears the sense buffer for REQUEST SENSE.  */
     scsi_req_complete(&r->req, GOOD);
-    fprintf(stderr, "Returned from emulate_read_data\n");
+//     fprintf(stderr, "Returned from emulate_read_data\n");
 }
 
 static int scsi_disk_check_mode_select(SCSIDiskState *s, int page,
@@ -1563,7 +1563,7 @@ static inline bool check_lba_range(SCSIDiskState *s,
      * and a 0-block read to the first LBA beyond the end of device is
      * valid.
      */
-    fprintf(stderr, "max_lba = %lu\n", s->qdev.max_lba + 1);
+//     fprintf(stderr, "max_lba = %lu\n", s->qdev.max_lba + 1);
     return (sector_num <= sector_num + nb_sectors &&
             sector_num + nb_sectors <= s->qdev.max_lba + 1);
 }
@@ -1817,7 +1817,7 @@ static void scsi_disk_emulate_write_data(SCSIRequest *req)
 
 static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
 {
-    fprintf(stderr, "disk command: 0x%x\n", buf[0]);
+//     fprintf(stderr, "disk command: 0x%x\n", buf[0]);
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, req->dev);
     uint64_t nb_sectors;
@@ -1872,7 +1872,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     switch (req->cmd.buf[0]) {
     case TEST_UNIT_READY:
         assert(!s->tray_open && blk_is_inserted(s->qdev.conf.blk));
-        fprintf(stderr, "SCSI: test unit ready\n");
+//         fprintf(stderr, "SCSI: test unit ready\n");
         break;
     case INQUIRY:
         buflen = scsi_disk_emulate_inquiry(req, outbuf);
@@ -2032,6 +2032,10 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
         }
         DPRINTF("Unsupported Service Action In\n");
         goto illegal_request;
+    case 0x52:
+//         fprintf(stderr, "0x52 - illegal request\n");
+        goto illegal_request;
+        break;
     case SYNCHRONIZE_CACHE:
         /* The request is used as the AIO opaque value, so add a ref.  */
         scsi_req_ref(&r->req);
@@ -2076,7 +2080,7 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     }
     assert(!r->req.aiocb);
     r->iov.iov_len = MIN(r->buflen, req->cmd.xfer);
-    fprintf(stderr, "iov_len = %u\n", (unsigned)r->iov.iov_len);
+//     fprintf(stderr, "iov_len = %u\n", (unsigned)r->iov.iov_len);
     if (r->iov.iov_len == 0) {
         scsi_req_complete(&r->req, GOOD);
     }
@@ -2091,7 +2095,7 @@ illegal_request:
     if (r->req.status == -1) {
         scsi_check_condition(r, SENSE_CODE(INVALID_FIELD));
     }
-    return 0;
+    return -1;
 
 illegal_lba:
     scsi_check_condition(r, SENSE_CODE(LBA_OUT_OF_RANGE));
@@ -2105,7 +2109,7 @@ illegal_lba:
 
 static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
 {
-    fprintf(stderr, "dma command: 0x%x\n", buf[0]);
+//     fprintf(stderr, "dma command: 0x%x\n", buf[0]);
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, req);
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, req->dev);
     uint32_t len;
@@ -2124,13 +2128,13 @@ static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
     case READ_10:
     case READ_12:
     case READ_16:
-        fprintf(stderr, "got to read cmd\n");
+//         fprintf(stderr, "got to read cmd\n");
         DPRINTF("Read (sector %" PRId64 ", count %u)\n", r->req.cmd.lba, len);
         if (r->req.cmd.buf[1] & 0xe0) {
             goto illegal_request;
         }
         if (!check_lba_range(s, r->req.cmd.lba, len)) {
-            fprintf(stderr, "lba = %lu, len = %d\n", r->req.cmd.lba, len);
+//             fprintf(stderr, "lba = %lu, len = %d\n", r->req.cmd.lba, len);
             goto illegal_lba;
         }
         r->sector = r->req.cmd.lba * (s->qdev.blocksize / 512);
@@ -2162,11 +2166,11 @@ static int32_t scsi_disk_dma_command(SCSIRequest *req, uint8_t *buf)
     default:
         abort();
     illegal_request:
-    fprintf(stderr, "illegal request\n");
+//     fprintf(stderr, "illegal request\n");
         scsi_check_condition(r, SENSE_CODE(INVALID_FIELD));
         return 0;
     illegal_lba:
-    fprintf(stderr, "illegal lba\n");
+//     fprintf(stderr, "illegal lba\n");
         scsi_check_condition(r, SENSE_CODE(LBA_OUT_OF_RANGE));
         return 0;
     }
@@ -2447,7 +2451,7 @@ SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
     uint8_t command;
 
     command = buf[0];
-    fprintf(stderr, "Command = 0x%x\n", command);
+//     fprintf(stderr, "Command = 0x%x\n", command);
     ops = scsi_disk_reqops_dispatch[command];
     if (!ops) {
         ops = &scsi_disk_emulate_reqops;

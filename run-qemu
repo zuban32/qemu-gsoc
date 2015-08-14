@@ -1,6 +1,7 @@
 #!/bin/bash
 if [[ $1 -eq 0 ]]; then
 	qemu-system-i386 \
+	-enable-kvm \
 	-drive if=none,file=/home/zuban32/Downloads/fedora.iso,id=cdrom \
 	-drive if=none,id=fake \
 	-device ide-bridge,id=bridge,drive=fake \
@@ -8,12 +9,15 @@ if [[ $1 -eq 0 ]]; then
 	-chardev stdio,id=seabios -device isa-debugcon,iobase=0x402,chardev=seabios \
 	-hda diskimage \
 	-m 1024 \
+	-smp 4 \
 	2> ~/ide_bridge
 else
 	qemu-system-i386 \
+	-enable-kvm \
 	-cdrom ~/Downloads/fedora.iso \
 	-chardev stdio,id=seabios -device isa-debugcon,iobase=0x402,chardev=seabios \
 	-hda diskimage \
 	-m 1024 \
+	-smp 4 \
 	2> ~/read_pio
 fi

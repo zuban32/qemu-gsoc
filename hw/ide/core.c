@@ -488,7 +488,7 @@ void ide_transfer_start(IDEState *s, uint8_t *buf, int size,
 static void ide_cmd_done(IDEState *s)
 {
     if (s->bus->dma->ops->cmd_done) {
-//         fprintf(stderr, "cmd_done exists\n");
+        fprintf(stderr, "cmd_done exists\n");
         s->bus->dma->ops->cmd_done(s->bus->dma);
     }
 }
@@ -822,13 +822,13 @@ static void ide_sector_start_dma(IDEState *s, enum ide_dma_cmd dma_cmd)
 
 void ide_start_dma(IDEState *s, BlockCompletionFunc *cb)
 {
-    fprintf(stderr, "DMA started\n");
+//     fprintf(stderr, "DMA started\n");
     s->io_buffer_index = 0;
     s->bus->retry_unit = s->unit;
     s->bus->retry_sector_num = ide_get_sector(s);
     s->bus->retry_nsector = s->nsector;
     if (s->bus->dma->ops->start_dma) {
-        printf("start_dma func exists\n");
+//         printf("start_dma func exists\n");
         s->bus->dma->ops->start_dma(s->bus->dma, s, cb);
     }
 }
@@ -1439,7 +1439,7 @@ abort_cmd:
 
 static bool cmd_identify_packet(IDEState *s, uint8_t cmd)
 {
-    fprintf(stderr, "identify packet\n");
+//     fprintf(stderr, "identify packet\n");
     ide_atapi_identify(s);
     s->status = READY_STAT | SEEK_STAT;
     ide_transfer_start(s, s->io_buffer, 512, ide_transfer_stop);
@@ -1479,23 +1479,22 @@ static bool cmd_device_reset(IDEState *s, uint8_t cmd)
 
 static bool cmd_packet(IDEState *s, uint8_t cmd)
 {
-    fprintf(stderr, "cmd_packet: 0x%x\n", cmd);
-    fprintf(stderr, "s->feature = %d\n", s->feature);
+//     fprintf(stderr, "cmd_packet: 0x%x\n", cmd);
+//     fprintf(stderr, "s->feature = %d\n", s->feature);
     /* overlapping commands not supported */
     if (s->feature & 0x02) {
         ide_abort_command(s);
-        fprintf(stderr, "packet abort\n");
+//         fprintf(stderr, "packet abort\n");
         return true;
     }
 
     s->status = READY_STAT | SEEK_STAT;
-//     s->feature |= 1;
     s->atapi_dma = s->feature & 1;
     s->nsector = 1;
     ide_transfer_start(s, s->io_buffer, ATAPI_PACKET_SIZE,
                        ide_atapi_cmd);
-    fprintf(stderr, "cmd_packet_end: 0x%x\n", cmd);
-    fprintf(stderr, "s->feature = %d\n", s->feature);
+//     fprintf(stderr, "cmd_packet_end: 0x%x\n", cmd);
+//     fprintf(stderr, "s->feature = %d\n", s->feature);
     return false;
 }
 
@@ -1837,8 +1836,8 @@ static const struct {
 
 static bool ide_cmd_permitted(IDEState *s, uint32_t cmd)
 {
-    fprintf(stderr, "drive_kind = %d\n", s->drive_kind);
-    fprintf(stderr, "%d %d\n",cmd < ARRAY_SIZE(ide_cmd_table), ide_cmd_table[cmd].flags & (1u << s->drive_kind));
+//     fprintf(stderr, "drive_kind = %d\n", s->drive_kind);
+//     fprintf(stderr, "%d %d\n",cmd < ARRAY_SIZE(ide_cmd_table), ide_cmd_table[cmd].flags & (1u << s->drive_kind));
     return cmd < ARRAY_SIZE(ide_cmd_table)
         && (ide_cmd_table[cmd].flags & (1u << s->drive_kind));
 }
@@ -1855,7 +1854,7 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
     s = idebus_active_if(bus);
     /* ignore commands to non existent slave */
     if (s != bus->ifs && !s->blk) {
-        fprintf(stderr, "slave donot exist\n");
+//         fprintf(stderr, "slave donot exist\n");
         return;
     }
 
@@ -1865,7 +1864,7 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
         return;}
 
     if (!ide_cmd_permitted(s, val)) {
-        fprintf(stderr, "forbidden\n");
+//         fprintf(stderr, "forbidden\n");
         ide_abort_command(s);
         ide_set_irq(s->bus);
         return;
@@ -1876,7 +1875,7 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
     s->io_buffer_offset = 0;
 
     complete = ide_cmd_table[val].handler(s, val);
-    fprintf(stderr, "complete = %d\n", complete);
+//     fprintf(stderr, "complete = %d\n", complete);
 //     fprintf(stderr, "ide: got data [%x][%x][%x][%x]\n", s->io_buffer[0],s->io_buffer[1],s->io_buffer[2],s->io_buffer[3]);
     if (complete) {
         s->status &= ~BUSY_STAT;
@@ -2342,7 +2341,7 @@ int ide_init_drive(IDEState *s, BlockBackend *blk, IDEDriveKind kind,
         blk_set_dev_ops(blk, &ide_cd_block_ops, s);
         blk_set_guest_block_size(blk, 2048);
         
-        fprintf(stderr, "blk is inserted: %d\n", blk_is_inserted(s->blk));
+//         fprintf(stderr, "blk is inserted: %d\n", blk_is_inserted(s->blk));
         
     } else {
         if (!blk_is_inserted(s->blk)) {

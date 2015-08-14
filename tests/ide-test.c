@@ -251,7 +251,6 @@ static int send_dma_request(int cmd, uint64_t sector, int nb_sectors,
     /* Wait for the DMA transfer to complete */
     do {
         status = inb(bmdma_base + bmreg_status);
-//         printf("Waiting: status = %u, res = %u, shouldn't be: %u\n", status, status & (BM_STS_ACTIVE | BM_STS_INTR), BM_STS_ACTIVE);
     } while ((status & (BM_STS_ACTIVE | BM_STS_INTR)) == BM_STS_ACTIVE);
 
     g_assert_cmpint(get_irq(IDE_PRIMARY_IRQ), ==, !!(status & BM_STS_INTR));

@@ -40,7 +40,7 @@
 static void bmdma_start_dma(IDEDMA *dma, IDEState *s,
                             BlockCompletionFunc *dma_cb)
 {
-    fprintf(stdout, "Start DMA\n");
+//     fprintf(stdout, "Start DMA\n");
     BMDMAState *bm = DO_UPCAST(BMDMAState, dma, dma);
 
     bm->dma_cb = dma_cb;
@@ -136,17 +136,14 @@ static int bmdma_rw_buf(IDEDMA *dma, int is_write)
 
     for(;;) {
         l = s->io_buffer_size - s->io_buffer_index;
-        fprintf(stderr, "l = %d\n", l);
         if (l <= 0) {
             break;
         }
         if (bm->cur_prd_len == 0) {
             /* end of table (with a fail safe of one page) */
             if (bm->cur_prd_last ||
-                (bm->cur_addr - bm->addr) >= BMDMA_PAGE_SIZE)    {            
-                fprintf(stderr, "breaking\n");
-            return 0;
-            }
+                (bm->cur_addr - bm->addr) >= BMDMA_PAGE_SIZE)
+                return 0;
             pci_dma_read(pci_dev, bm->cur_addr, &prd, 8);
             bm->cur_addr += 8;
             prd.addr = le32_to_cpu(prd.addr);
@@ -160,12 +157,9 @@ static int bmdma_rw_buf(IDEDMA *dma, int is_write)
         }
         if (l > bm->cur_prd_len)
             l = bm->cur_prd_len;
-        fprintf(stderr, "l = %d\n", l);
         
         if (l > 0) {
-            fprintf(stderr, "len > 0");
             if (is_write) {
-                fprintf(stderr, "PCI writing\n");
                 pci_dma_write(pci_dev, bm->cur_prd_addr,
                               s->io_buffer + s->io_buffer_index, l);
             } else {
@@ -183,8 +177,6 @@ static int bmdma_rw_buf(IDEDMA *dma, int is_write)
 static void bmdma_set_inactive(IDEDMA *dma, bool more)
 {
     BMDMAState *bm = DO_UPCAST(BMDMAState, dma, dma);
-    
-    fprintf(stderr, "setting inactive\n");
 
     bm->dma_cb = NULL;
     if (more) {
@@ -192,8 +184,6 @@ static void bmdma_set_inactive(IDEDMA *dma, bool more)
     } else {
         bm->status &= ~BM_STATUS_DMAING;
     }
-    
-    fprintf(stderr, "status is active: %d\n", bm->status & BM_STATUS_DMAING);
 }
 
 static void bmdma_restart_dma(IDEDMA *dma)

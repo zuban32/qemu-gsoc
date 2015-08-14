@@ -113,7 +113,7 @@ static int cd_read_sector(IDEState *s, int lba, uint8_t *buf, int sector_size)
     case 2048:
         block_acct_start(blk_get_stats(s->blk), &s->acct,
                          4 * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
-        fprintf(stderr, "blk_read: sect = %ld, sct_num = %d\n", (int64_t)lba << 2, 4);
+//         fprintf(stderr, "blk_read: sect = %ld, sct_num = %d\n", (int64_t)lba << 2, 4);
         ret = blk_read(s->blk, (int64_t)lba << 2, buf, 4);
         block_acct_done(blk_get_stats(s->blk), &s->acct);
         break;
@@ -135,7 +135,7 @@ static int cd_read_sector(IDEState *s, int lba, uint8_t *buf, int sector_size)
 
 void ide_atapi_cmd_ok(IDEState *s)
 {
-    fprintf(stderr, "cmd_ok\n");
+//     fprintf(stderr, "cmd_ok\n");
     
     s->error = 0;
     s->status = READY_STAT | SEEK_STAT;
@@ -152,6 +152,7 @@ void ide_atapi_cmd_error(IDEState *s, int sense_key, int asc)
     s->error = sense_key << 4;
     s->status = READY_STAT | ERR_STAT;
     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
+//     fprintf(stderr, "cmd error: sector = %d\n", s->nsector);
     s->sense_key = sense_key;
     s->asc = asc;
     ide_transfer_stop(s);
@@ -174,14 +175,14 @@ void ide_atapi_io_error(IDEState *s, int ret)
 void ide_atapi_cmd_reply_end(IDEState *s)
 {
     int byte_count_limit, size, ret;
-// #ifdef DEBUG_IDE_ATAPI
-    fprintf(stderr, "reply: tx_size=%d elem_tx_size=%d index=%d\n",
+#ifdef DEBUG_IDE_ATAPI
+    printf("reply: tx_size=%d elem_tx_size=%d index=%d\n",
            s->packet_transfer_size,
            s->elementary_transfer_size,
            s->io_buffer_index);
-// #endif
+#endif
     if (s->packet_transfer_size <= 0) {
-        fprintf(stderr, "end of transfer\n");
+//         fprintf(stderr, "end of transfer\n");
         /* end of transfer */
         ide_atapi_cmd_ok(s);
         ide_set_irq(s->bus);
@@ -226,7 +227,7 @@ void ide_atapi_cmd_reply_end(IDEState *s)
                     byte_count_limit--;
                 size = byte_count_limit;
             }
-            fprintf(stderr, "before hcyl: %d\n", size);
+//             fprintf(stderr, "before hcyl: %d\n", size);
             s->lcyl = size;
             s->hcyl = size >> 8;
             s->elementary_transfer_size = size;
@@ -282,9 +283,9 @@ static void ide_atapi_cmd_read_pio(IDEState *s, int lba, int nb_sectors,
 
     s->status = READY_STAT | SEEK_STAT;
     
-    fprintf(stderr, "ide-bridge transfer: lba = %d, pck_size = %d, el_size = %d, index = %d, sect_size = %d\n",
-        s->lba, s->packet_transfer_size, s->elementary_transfer_size, s->io_buffer_index, s->cd_sector_size
-    );
+//     fprintf(stderr, "ide-bridge transfer: lba = %d, pck_size = %d, el_size = %d, index = %d, sect_size = %d\n",
+//         s->lba, s->packet_transfer_size, s->elementary_transfer_size, s->io_buffer_index, s->cd_sector_size
+//     );
     
     ide_atapi_cmd_reply_end(s);
 }
@@ -331,15 +332,15 @@ static void ide_atapi_cmd_read_dma_cb(void *opaque, int ret)
             s->lba += n;
         }
         s->packet_transfer_size -= s->io_buffer_size;
-        fprintf(stderr, "rw_buf is called\n");
+//         fprintf(stderr, "rw_buf is called\n");
         if (s->bus->dma->ops->rw_buf(s->bus->dma, 1) == 0)
             goto eot;
     }
 
     if (s->packet_transfer_size <= 0) {
-//         s->status = READY_STAT | SEEK_STAT;
+        s->status = READY_STAT | SEEK_STAT;
         s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
-        fprintf(stderr, "IRQ\n");
+//         fprintf(stderr, "IRQ\n");
         ide_set_irq(s->bus);
         goto eot;
     }
@@ -363,14 +364,14 @@ static void ide_atapi_cmd_read_dma_cb(void *opaque, int ret)
     s->bus->dma->iov.iov_base = (void *)(s->io_buffer + data_offset);
     s->bus->dma->iov.iov_len = n * 4 * 512;
     qemu_iovec_init_external(&s->bus->dma->qiov, &s->bus->dma->iov, 1);
-    fprintf(stderr, "dma: aio_read\n");
+//     fprintf(stderr, "dma: aio_read\n");
     s->bus->dma->aiocb = blk_aio_readv(s->blk, (int64_t)s->lba << 2,
                                        &s->bus->dma->qiov, n * 4,
                                        ide_atapi_cmd_read_dma_cb, s);
     return;
 
 eot:
-fprintf(stderr, "End of transfer - DMA\n");
+// fprintf(stderr, "End of transfer - DMA\n");
     block_acct_done(blk_get_stats(s->blk), &s->acct);
     ide_set_inactive(s, false);
 }
@@ -629,6 +630,14 @@ static void cmd_get_event_status_notification(IDEState *s,
     }
     gesn_event_header->len = cpu_to_be16(used_len
                                          - sizeof(*gesn_event_header));
+    
+//     fprintf(stderr, "event status notif: size = %u\n", used_len);
+//     int i = 0;
+//     for(i = 0; i < used_len; i++) {
+//         fprintf(stderr, "[%x]", buf[i]);
+//         if(i % 8 == 7) fprintf(stderr, "\n");
+//     }
+    
     ide_atapi_cmd_reply(s, used_len, max_len);
 }
 
@@ -764,7 +773,7 @@ static void cmd_inquiry(IDEState *s, uint8_t *buf)
 
  out:
     buf[size_idx] = idx - preamble_len;
-    fprintf(stderr, "inquiry: reply %d %d\n", idx, max_len);
+//     fprintf(stderr, "inquiry: reply %d %d\n", idx, max_len);
     ide_atapi_cmd_reply(s, idx, max_len);
     return;
 }
@@ -941,7 +950,7 @@ static void cmd_read(IDEState *s, uint8_t* buf)
 {
     int nb_sectors, lba;
     
-    fprintf(stderr, "cmd read\n");
+//     fprintf(stderr, "cmd read\n");
     
     if (buf[0] == GPCMD_READ_10) {
         nb_sectors = ube16_to_cpu(buf + 7);
@@ -1086,7 +1095,7 @@ static void cmd_read_toc_pma_atip(IDEState *s, uint8_t* buf)
         ide_atapi_cmd_error(s, ILLEGAL_REQUEST,
                             ASC_INV_FIELD_IN_CMD_PACKET);
     }
-    fprintf(stderr, "read toc: len = %d\n", len);
+//     fprintf(stderr, "read toc: len = %d\n", len);
 }
 
 static void cmd_read_cdvd_capacity(IDEState *s, uint8_t* buf)
@@ -1288,11 +1297,11 @@ void ide_atapi_cmd(IDEState *s)
         return;
     }
     
-    char res1 = s->drive_kind != IDE_BRIDGE;
-    char res2 = media_present(s);
-    char res3 = blk_is_inserted(s->blk);
+//     char res1 = s->drive_kind != IDE_BRIDGE;
+//     char res2 = media_present(s);
+//     char res3 = blk_is_inserted(s->blk);
     
-    fprintf(stderr, "ATAPI: checking ready - %d %d %d, total = %d\n", res1, res2, res3, res1 && (!res2 || !res3));
+//     fprintf(stderr, "ATAPI: checking ready - %d %d %d, total = %d\n", res1, res2, res3, res1 && (!res2 || !res3));
     
     /* Report a Not Ready condition if appropriate for the command */
     if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
@@ -1306,13 +1315,19 @@ void ide_atapi_cmd(IDEState *s)
     
 //     int cmd = buf[0];
     
-    if(s->drive_kind == IDE_BRIDGE)
+    if(s->drive_kind == IDE_BRIDGE && s->io_buffer[0] != 0x52)
     {   
         IDEDevice *dev = s->bus->master;
         SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
         s->cur_req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
-        if(scsi_req_enqueue(s->cur_req)) scsi_req_continue(s->cur_req);
-        fprintf(stderr, "returned from atapi\n");
+        
+        int res = scsi_req_enqueue(s->cur_req);
+//         fprintf(stderr, "ATAPI res = %d\n", res);
+        
+        if(res > 0) scsi_req_continue(s->cur_req);
+        else if(res < 0) goto error;
+        
+//         fprintf(stderr, "returned from atapi\n");
         return;
     }
     
@@ -1324,6 +1339,11 @@ void ide_atapi_cmd(IDEState *s)
 
         return;
     }
-
+    
+error:    
+    fprintf(stderr, "command doesn't exist\n");
     ide_atapi_cmd_error(s, ILLEGAL_REQUEST, ASC_ILLEGAL_OPCODE);
+    int i = 0;
+    for(i = 0; i < 10; i++)
+        fprintf(stderr, "[%x]", s->io_buffer[0]);
 }
