@@ -3,7 +3,6 @@
 static void ide_bridge_do_transfer(IDEState *s)
 {    
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
-    s->status = READY_STAT | SEEK_STAT;
     
     if(r->buflen > 0) {
         int size = r->buflen;
@@ -19,10 +18,12 @@ static void ide_bridge_do_transfer(IDEState *s)
         }
         s->lcyl = size;
         s->hcyl = size >> 8;
+        s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
         
-        ide_transfer_start(s, s->io_buffer + r->qiov.size - r->buflen, size, &ide_bridge_do_transfer);
-        
+        int offset = (r->buflen == r->qiov.size) ? 0 : r->qiov.size - r->buflen;
         r->buflen -= size;
+        
+        ide_transfer_start(s, s->io_buffer + offset, size, &ide_bridge_do_transfer);     
         ide_set_irq(s->bus);
     } else {
         scsi_req_complete(s->cur_req, GOOD);
@@ -63,31 +64,12 @@ void ide_bridge_start_transfer(SCSIRequest *req, uint32_t len)
     } else {
         if(cmd == INQUIRY) len = 36;
         r->iov.iov_len = len;
-        s->status = READY_STAT | SEEK_STAT;
         qemu_iovec_concat_iov(&r->qiov, &r->iov, len, 0, len);
         qemu_iovec_to_buf(&r->qiov, 0, s->io_buffer, r->qiov.size);        
     }
     
     s->io_buffer_index = 0;
-    int size = r->qiov.size;    
-    r->buflen = size;
     s->status = READY_STAT | SEEK_STAT;
-    
-    int byte_count_limit = s->lcyl | (s->hcyl << 8);
-    if (byte_count_limit == 0xffff)
-        byte_count_limit--;
-    if (size > byte_count_limit) {
-        /* byte count limit must be even if this case */
-        if (byte_count_limit & 1)
-            byte_count_limit--;
-        size = byte_count_limit;
-    }
-    if(!(s->feature & 1)) {
-        s->lcyl = size;
-        s->hcyl = size >> 8;    
-        r->buflen -= size;        
-        s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO;
-    }
     
     if(cmd != TEST_UNIT_READY && cmd != ALLOW_MEDIUM_REMOVAL) {
         if(s->feature & 1) {
@@ -105,9 +87,9 @@ void ide_bridge_start_transfer(SCSIRequest *req, uint32_t len)
             if (s->bus->dma->ops->start_dma) {
                 s->bus->dma->ops->start_dma(s->bus->dma, s, ide_bridge_dma_complete);
             }
-        } else {
-            ide_transfer_start(s, s->io_buffer, size, &ide_bridge_do_transfer);
-            ide_set_irq(s->bus);
+        } else {    
+            r->buflen = r->qiov.size;
+            ide_bridge_do_transfer(s);
         }
     }
     else
