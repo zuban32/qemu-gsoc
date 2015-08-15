@@ -1,23 +1,17 @@
 #!/bin/bash
 if [[ $1 -eq 0 ]]; then
 	qemu-system-x86_64 \
-	-enable-kvm \
-	-drive if=none,file=/home/zuban32/Downloads/ubuntu.iso,id=cdrom \
+	-drive if=none,file=/home/zuban32/Downloads/ubuntu.iso,id=cdrom,format=raw \
 	-drive if=none,id=fake \
 	-device ide-bridge,id=bridge,drive=fake \
 	-device scsi-cd,drive=cdrom,bus=bridge.0 \
-	-chardev stdio,id=seabios -device isa-debugcon,iobase=0x402,chardev=seabios \
-	-hda diskimage \
 	-m 1024 \
-	-smp 4 \
+	-enable-kvm
 	2> ~/ide_bridge
 else
 	qemu-system-x86_64 \
-	-enable-kvm \
-	-cdrom ~/Downloads/ubuntu.iso \
-	-chardev stdio,id=seabios -device isa-debugcon,iobase=0x402,chardev=seabios \
+	-cdrom ~/Downloads/dsl.iso \
 	-hda diskimage \
 	-m 1024 \
-	-smp 4 \
 	2> ~/read_pio
 fi

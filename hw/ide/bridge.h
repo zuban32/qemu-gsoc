@@ -3,7 +3,7 @@
 
 #include "hw/ide/internal.h"
 
-void ide_bridge_transfer(SCSIRequest *req, uint32_t len);
+void ide_bridge_start_transfer(SCSIRequest *req, uint32_t len);
 void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid);
 
 #endif

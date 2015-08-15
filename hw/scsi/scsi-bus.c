@@ -1262,15 +1262,13 @@ int scsi_req_parse_cdb(SCSIDevice *dev, SCSICommand *cmd, uint8_t *buf)
         break;
     }
 
-//     if (rc != 0)
-//         return rc;
-    
-//     fprintf(stderr, "cmd_len = %d\n", cmd->len);
+    if (rc != 0)
+        return rc;
 
     memcpy(cmd->buf, buf, cmd->len);
     scsi_cmd_xfer_mode(cmd);
     cmd->lba = scsi_cmd_lba(cmd);
-    return rc;
+    return 0;
 }
 
 void scsi_device_report_change(SCSIDevice *dev, SCSISense sense)
@@ -1614,6 +1612,7 @@ void scsi_req_unref(SCSIRequest *req)
 {
     assert(req->refcount > 0);
     if (--req->refcount == 0) {
+        fprintf(stderr, "Freeing request\n");
         BusState *qbus = req->dev->qdev.parent_bus;
         SCSIBus *bus = DO_UPCAST(SCSIBus, qbus, qbus);
 

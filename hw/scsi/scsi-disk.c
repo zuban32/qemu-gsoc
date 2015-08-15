@@ -271,12 +271,6 @@ static void scsi_read_complete(void * opaque, int ret)
     SCSIDiskReq *r = (SCSIDiskReq *)opaque;
     SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, r->req.dev);
     int n;
-    
-//     uint8_t *buf = r->qiov.iov->iov_base;
-//     fprintf(stderr, "buf = 0x%lx\n", (unsigned long)buf);
-//     int off = 0;
-    
-//     fprintf(stderr, "scsi0 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
 
     assert(r->req.aiocb != NULL);
     r->req.aiocb = NULL;
@@ -291,8 +285,6 @@ static void scsi_read_complete(void * opaque, int ret)
             goto done;
         }
     }
-//     fprintf(stderr, "qiov.size = %u\n", (unsigned)r->qiov.size);
-
 
     DPRINTF("Data ready tag=0x%x len=%zd\n", r->req.tag, r->qiov.size);
 
@@ -300,14 +292,9 @@ static void scsi_read_complete(void * opaque, int ret)
     r->sector += n;
     r->sector_count -= n;
     scsi_req_data(&r->req, r->qiov.size);
-//     fprintf(stderr, "scsi1 - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
-
 
 done:
     scsi_req_unref(&r->req);
-    
-    if(!r->sector_count)
-        scsi_req_complete(&r->req, GOOD);
 }
 
 /* Actually issue a read to the block device.  */
@@ -343,12 +330,7 @@ void scsi_do_read(void *opaque, int ret)
     } else {  
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
-                         n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
-//         fprintf(stderr, "blk_read: sect = %lu, sct_num = %d\n", r->sector, n);
-        IDEDevice *dev = IDE_DEVICE(r->req.bus->qbus.parent);
-        IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
-        IDEState *state = bus->ifs;
-        state->status |= BUSY_STAT;
+                         n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);        
         r->req.aiocb = blk_aio_readv(s->qdev.conf.blk, r->sector, &r->qiov, n,
                                      scsi_read_complete, r);
     }
@@ -761,6 +743,7 @@ int scsi_disk_emulate_inquiry(SCSIRequest *req, uint8_t *outbuf)
 
     /* Sync data transfer and TCQ.  */
     outbuf[7] = 0x10 | (req->bus->info->tcq ? 0x02 : 0);
+    
     return buflen;
 }
 
@@ -1368,17 +1351,10 @@ static void scsi_disk_emulate_read_data(SCSIRequest *req)
         r->iov.iov_len = 0;
         r->started = true;
         scsi_req_data(&r->req, buflen);
-//         if(req->cmd.buf[0] != INQUIRY && req->cmd.buf[0])
-//             return;
+        return;
     }
-//     uint8_t *buf = r->iov.iov_base;
-//     int off = 0;
-
-    scsi_req_unref(req);
-//     fprintf(stderr, "emulate - read data: [%x][%x][%x][%x]\n", buf[0+off], buf[1+off], buf[2+off], buf[3+off]);
     /* This also clears the sense buffer for REQUEST SENSE.  */
     scsi_req_complete(&r->req, GOOD);
-//     fprintf(stderr, "Returned from emulate_read_data\n");
 }
 
 static int scsi_disk_check_mode_select(SCSIDiskState *s, int page,
@@ -2032,10 +2008,6 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
         }
         DPRINTF("Unsupported Service Action In\n");
         goto illegal_request;
-    case 0x52:
-//         fprintf(stderr, "0x52 - illegal request\n");
-        goto illegal_request;
-        break;
     case SYNCHRONIZE_CACHE:
         /* The request is used as the AIO opaque value, so add a ref.  */
         scsi_req_ref(&r->req);
@@ -2080,7 +2052,6 @@ static int32_t scsi_disk_emulate_command(SCSIRequest *req, uint8_t *buf)
     }
     assert(!r->req.aiocb);
     r->iov.iov_len = MIN(r->buflen, req->cmd.xfer);
-//     fprintf(stderr, "iov_len = %u\n", (unsigned)r->iov.iov_len);
     if (r->iov.iov_len == 0) {
         scsi_req_complete(&r->req, GOOD);
     }
@@ -2451,7 +2422,6 @@ SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
     uint8_t command;
 
     command = buf[0];
-//     fprintf(stderr, "Command = 0x%x\n", command);
     ops = scsi_disk_reqops_dispatch[command];
     if (!ops) {
         ops = &scsi_disk_emulate_reqops;

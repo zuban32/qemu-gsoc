@@ -135,8 +135,6 @@ static int cd_read_sector(IDEState *s, int lba, uint8_t *buf, int sector_size)
 
 void ide_atapi_cmd_ok(IDEState *s)
 {
-//     fprintf(stderr, "cmd_ok\n");
-    
     s->error = 0;
     s->status = READY_STAT | SEEK_STAT;
     s->nsector = (s->nsector & ~7) | ATAPI_INT_REASON_IO | ATAPI_INT_REASON_CD;
@@ -1212,7 +1210,7 @@ enum {
     CHECK_READY = 0x02,
 };
 
-static const struct ATAPICommand {
+static const struct {
     void (*handler)(IDEState *s, uint8_t *buf);
     int flags;
 } atapi_cmd_table[0x100] = {
@@ -1235,19 +1233,11 @@ static const struct ATAPICommand {
     [ 0xbd ] = { cmd_mechanism_status,              0 },
     [ 0xbe ] = { cmd_read_cd,                       CHECK_READY },
     /* [1] handler detects and reports not ready condition itself */
-};/*,
-bridge_cmd_table[0x100] = {
-    [0x12] = { inquiry_wrapper,                   ALLOW_UA }
-};*/
+};
 
 void ide_atapi_cmd(IDEState *s)
 {
     uint8_t *buf;
-
-//     const struct ATAPICommand *cmd_table =
-//         (s->drive_kind == IDE_BRIDGE &&
-//         bridge_cmd_table[s->io_buffer[0]].handler) ?
-//             bridge_cmd_table : atapi_cmd_table;
 
     buf = s->io_buffer;
 #ifdef DEBUG_IDE_ATAPI
@@ -1261,8 +1251,7 @@ void ide_atapi_cmd(IDEState *s)
     }
 #endif
 
-    fprintf(stderr, "ATAPI: buf[0] = 0x%x\n", buf[0]);
-//     fprintf(stdout, "ATAPI: buf[0] = 0x%x\n", buf[0]);
+//     fprintf(stderr, "ATAPI: buf[0] = 0x%x\n", buf[0]);
     /*
      * If there's a UNIT_ATTENTION condition pending, only command flagged with
      * ALLOW_UA are allowed to complete. with other commands getting a CHECK
@@ -1272,7 +1261,6 @@ void ide_atapi_cmd(IDEState *s)
     if (s->sense_key == UNIT_ATTENTION &&
         !(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA)) {
         ide_atapi_cmd_check_status(s);
-    fprintf(stderr, "return 1\n");
         return;
     }
     /*
@@ -1292,58 +1280,34 @@ void ide_atapi_cmd(IDEState *s)
             ide_atapi_cmd_error(s, UNIT_ATTENTION, ASC_MEDIUM_MAY_HAVE_CHANGED);
             s->cdrom_changed = 0;
         }
-    fprintf(stderr, "return 2\n");
-
         return;
     }
-    
-//     char res1 = s->drive_kind != IDE_BRIDGE;
-//     char res2 = media_present(s);
-//     char res3 = blk_is_inserted(s->blk);
-    
-//     fprintf(stderr, "ATAPI: checking ready - %d %d %d, total = %d\n", res1, res2, res3, res1 && (!res2 || !res3));
     
     /* Report a Not Ready condition if appropriate for the command */
     if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
-        (s->drive_kind != IDE_BRIDGE && (!media_present(s) || !blk_is_inserted(s->blk))))
-    {
+        (s->drive_kind != IDE_BRIDGE && (!media_present(s) || !blk_is_inserted(s->blk)))) {
         ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
-            fprintf(stderr, "return 3\n");
-
         return;
     }
     
-//     int cmd = buf[0];
-    
-    if(s->drive_kind == IDE_BRIDGE && s->io_buffer[0] != 0x52)
-    {   
+    if(s->drive_kind == IDE_BRIDGE) {   
         IDEDevice *dev = s->bus->master;
         SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
         s->cur_req = scsi_new_request(scsi_dev, 0, 0, buf, NULL);
         
-        int res = scsi_req_enqueue(s->cur_req);
-//         fprintf(stderr, "ATAPI res = %d\n", res);
+        /* Looks like a hack, but it's better than placing it at scsi_do_read */
+        if(buf[0] == READ_10)
+            s->status |= BUSY_STAT; 
         
-        if(res > 0) scsi_req_continue(s->cur_req);
-        else if(res < 0) goto error;
-        
-//         fprintf(stderr, "returned from atapi\n");
+        if(scsi_req_enqueue(s->cur_req)) scsi_req_continue(s->cur_req);
         return;
     }
     
     /* Execute the command */
     if (atapi_cmd_table[s->io_buffer[0]].handler) {
         atapi_cmd_table[s->io_buffer[0]].handler(s, buf);    
-//         if(cmd == 0x28)
-//             printf("read data: [%x][%x][%x][%x]\n", buf[0], buf[1], buf[2], buf[3]); 
-
         return;
     }
     
-error:    
-    fprintf(stderr, "command doesn't exist\n");
     ide_atapi_cmd_error(s, ILLEGAL_REQUEST, ASC_ILLEGAL_OPCODE);
-    int i = 0;
-    for(i = 0; i < 10; i++)
-        fprintf(stderr, "[%x]", s->io_buffer[0]);
 }

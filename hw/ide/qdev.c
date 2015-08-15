@@ -161,7 +161,7 @@ static const struct SCSIBusInfo atapi_scsi_info = {
     .max_target = 0,
     .max_lun = 0,
     
-    .transfer_data = ide_bridge_transfer,
+    .transfer_data = ide_bridge_start_transfer,
     .complete = ide_bridge_complete,
     .cancel = NULL
 };
@@ -175,7 +175,6 @@ typedef struct IDEDrive {
 static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
 {
     IDEBus *bus = DO_UPCAST(IDEBus, qbus, dev->qdev.parent_bus);
-    fprintf(stderr, "unit = %d\n", dev->unit);
     IDEState *s = bus->ifs + dev->unit;
     Error *err = NULL;
 
