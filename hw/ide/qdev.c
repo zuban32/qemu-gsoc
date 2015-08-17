@@ -25,6 +25,7 @@
 #include "hw/block/block.h"
 #include "sysemu/sysemu.h"
 #include "qapi/visitor.h"
+#include "hw/ide/bridge.h"
 
 /* --------------------------------- */
 
@@ -143,6 +144,17 @@ int ide_get_bios_chs_trans(BusState *bus, int unit)
     return DO_UPCAST(IDEBus, qbus, bus)->ifs[unit].chs_trans;
 }
 
+/* BusInfo structure for ATAPI-SCSI bridge */
+static const struct SCSIBusInfo atapi_scsi_info = {
+    .tcq = true,
+    .max_target = 0,
+    .max_lun = 0,
+
+    .transfer_data = NULL,
+    .complete = NULL,
+    .cancel = NULL
+};
+
 /* --------------------------------- */
 
 typedef struct IDEDrive {
@@ -183,6 +195,11 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
                        dev->conf.cyls, dev->conf.heads, dev->conf.secs,
                        dev->chs_trans) < 0) {
         return -1;
+    }
+    if (kind == IDE_BRIDGE) {
+        scsi_bus_new(&dev->scsi_bus, sizeof(dev->scsi_bus), &dev->qdev,
+                     &atapi_scsi_info, NULL);
+        scsi_bus_legacy_handle_cmdline(&dev->scsi_bus, NULL);
     }
 
     if (!dev->version) {
@@ -253,6 +270,11 @@ static int ide_cd_initfn(IDEDevice *dev)
     return ide_dev_initfn(dev, IDE_CD);
 }
 
+static int ide_bridge_initfn(IDEDevice *dev)
+{
+    return ide_dev_initfn(dev, IDE_BRIDGE);
+}
+
 static int ide_drive_initfn(IDEDevice *dev)
 {
     DriveInfo *dinfo = blk_legacy_dinfo(dev->conf.blk);
@@ -314,6 +336,23 @@ static const TypeInfo ide_cd_info = {
     .class_init    = ide_cd_class_init,
 };
 
+static void ide_bridge_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    IDEDeviceClass *k = IDE_DEVICE_CLASS(klass);
+    k->init = ide_bridge_initfn;
+    dc->fw_name = "drive";
+    dc->desc = "virtual ATAPI-SCSI bridge";
+    dc->props = ide_cd_properties;
+}
+
+static const TypeInfo ide_bridge_info = {
+    .name          = "ide-bridge",
+    .parent        = TYPE_IDE_DEVICE,
+    .instance_size = sizeof(IDEDrive),
+    .class_init    = ide_bridge_class_init,
+};
+
 static Property ide_drive_properties[] = {
     DEFINE_IDE_DEV_PROPERTIES(),
     DEFINE_PROP_END_OF_LIST(),
@@ -360,6 +399,7 @@ static void ide_register_types(void)
     type_register_static(&ide_bus_info);
     type_register_static(&ide_hd_info);
     type_register_static(&ide_cd_info);
+    type_register_static(&ide_bridge_info);
     type_register_static(&ide_drive_info);
     type_register_static(&ide_device_type_info);
 }
