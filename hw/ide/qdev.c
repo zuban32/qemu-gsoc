@@ -150,8 +150,8 @@ static const struct SCSIBusInfo atapi_scsi_info = {
     .max_target = 0,
     .max_lun = 0,
 
-    .transfer_data = NULL,
-    .complete = NULL,
+    .transfer_data = ide_bridge_start_transfer,
+    .complete = ide_bridge_complete,
     .cancel = NULL
 };
 
