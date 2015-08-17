@@ -249,6 +249,9 @@ SCSIRequest *scsi_req_alloc(const SCSIReqOps *reqops, SCSIDevice *d,
                             uint32_t tag, uint32_t lun, void *hba_private);
 SCSIRequest *scsi_req_new(SCSIDevice *d, uint32_t tag, uint32_t lun,
                           uint8_t *buf, void *hba_private);
+SCSIRequest *scsi_new_request_from_bridge(SCSIDevice *d, uint32_t tag,
+                                          uint32_t lun, uint8_t *buf,
+                                          void *hba_private);
 int32_t scsi_req_enqueue(SCSIRequest *req);
 void scsi_req_free(SCSIRequest *req);
 SCSIRequest *scsi_req_ref(SCSIRequest *req);

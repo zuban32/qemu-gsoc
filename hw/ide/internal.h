@@ -495,7 +495,7 @@ struct IDEDevice {
     char *serial;
     char *model;
     uint64_t wwn;
-    SCSIBus *scsi_bus;
+    SCSIBus scsi_bus;
 };
 
 /* These are used for the error_status field of IDEBus */
