@@ -6,6 +6,7 @@
 #include "hw/block/block.h"
 #include "sysemu/sysemu.h"
 #include "qemu/notify.h"
+#include "block/accounting.h"
 
 #define MAX_SCSI_DEVS	255
 
@@ -119,6 +120,18 @@ extern const VMStateDescription vmstate_scsi_device;
     .flags      = VMS_STRUCT,                                        \
     .offset     = vmstate_offset_value(_state, _field, SCSIDevice),  \
 }
+
+typedef struct SCSIDiskReq {
+    SCSIRequest req;
+    /* Both sector and sector_count are in terms of qemu 512 byte blocks.  */
+    uint64_t sector;
+    uint32_t sector_count;
+    uint32_t buflen;
+    bool started;
+    struct iovec iov;
+    QEMUIOVector qiov;
+    BlockAcctCookie acct;
+} SCSIDiskReq;
 
 /* cdrom.c */
 int cdrom_read_toc(int nb_sectors, uint8_t *buf, int msf, int start_track);
