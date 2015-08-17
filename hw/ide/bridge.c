@@ -1,6 +1,6 @@
 #include "hw/ide/bridge.h"
 
-static void ide_bridge_do_transfer(IDEState *s)
+void ide_bridge_do_transfer(IDEState *s)
 {
     SCSIDiskReq *r = DO_UPCAST(SCSIDiskReq, req, s->cur_req);
 

@@ -34,6 +34,7 @@
 #include "sysemu/block-backend.h"
 
 #include <hw/ide/internal.h>
+#include "hw/ide/bridge.h"
 
 /* These values were based on a Seagate ST3500418AS but have been modified
    to make more sense in QEMU */
@@ -2002,7 +2003,8 @@ static bool ide_is_pio_out(IDEState *s)
     } else if (s->end_transfer_func == ide_sector_read ||
                s->end_transfer_func == ide_transfer_stop ||
                s->end_transfer_func == ide_atapi_cmd_reply_end ||
-               s->end_transfer_func == ide_dummy_transfer_stop) {
+               s->end_transfer_func == ide_dummy_transfer_stop ||
+               s->end_transfer_func == ide_bridge_do_transfer) {
         return true;
     }
 

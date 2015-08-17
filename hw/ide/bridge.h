@@ -5,5 +5,6 @@
 
 void ide_bridge_start_transfer(SCSIRequest *req, uint32_t len);
 void ide_bridge_complete(SCSIRequest *req, uint32_t status, size_t resid);
+void ide_bridge_do_transfer(IDEState *s);
 
 #endif
