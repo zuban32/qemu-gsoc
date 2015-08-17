@@ -1257,5 +1257,21 @@ void ide_atapi_cmd(IDEState *s)
         return;
     }
 
+    if (s->drive_kind == IDE_BRIDGE) {
+        IDEDevice *dev = s->bus->master;
+        SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
+        s->cur_req = scsi_new_request_from_bridge(scsi_dev, 0, 0, buf, NULL);
+
+        /* Looks like a hack, but it's better than placing it at scsi_do_read */
+        if (buf[0] == READ_10) {
+            s->status |= BUSY_STAT;
+        }
+
+        if (scsi_req_enqueue(s->cur_req)) {
+            scsi_req_continue(s->cur_req);
+        }
+        return;
+    }
+
     ide_atapi_cmd_error(s, ILLEGAL_REQUEST, ASC_ILLEGAL_OPCODE);
 }
