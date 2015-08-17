@@ -1230,7 +1230,8 @@ void ide_atapi_cmd(IDEState *s)
      * states rely on this behavior.
      */
     if (!(atapi_cmd_table[s->io_buffer[0]].flags & ALLOW_UA) &&
-        !s->tray_open && blk_is_inserted(s->blk) && s->cdrom_changed) {
+        (s->drive_kind != IDE_BRIDGE && !s->tray_open &&
+        blk_is_inserted(s->blk) && s->cdrom_changed)) {
 
         if (s->cdrom_changed == 1) {
             ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
@@ -1245,15 +1246,10 @@ void ide_atapi_cmd(IDEState *s)
 
     /* Report a Not Ready condition if appropriate for the command */
     if ((atapi_cmd_table[s->io_buffer[0]].flags & CHECK_READY) &&
-        (!media_present(s) || !blk_is_inserted(s->blk)))
+        (s->drive_kind != IDE_BRIDGE &&
+            (!media_present(s) || !blk_is_inserted(s->blk))))
     {
         ide_atapi_cmd_error(s, NOT_READY, ASC_MEDIUM_NOT_PRESENT);
-        return;
-    }
-
-    /* Execute the command */
-    if (atapi_cmd_table[s->io_buffer[0]].handler) {
-        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);
         return;
     }
 
@@ -1270,6 +1266,12 @@ void ide_atapi_cmd(IDEState *s)
         if (scsi_req_enqueue(s->cur_req)) {
             scsi_req_continue(s->cur_req);
         }
+        return;
+    }
+
+    /* Execute the command */
+    if (atapi_cmd_table[s->io_buffer[0]].handler) {
+        atapi_cmd_table[s->io_buffer[0]].handler(s, buf);
         return;
     }
 
