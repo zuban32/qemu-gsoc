@@ -548,7 +548,8 @@ static void ahci_init_d2h(AHCIDevice *ad)
     init_fis[4] = 1;
     init_fis[12] = 1;
 
-    if (ide_state->drive_kind == IDE_CD) {
+    if (ide_state->drive_kind == IDE_CD ||
+        ide_state->drive_kind == IDE_BRIDGE) {
         init_fis[5] = ide_state->lcyl;
         init_fis[6] = ide_state->hcyl;
     }
@@ -607,7 +608,8 @@ static void ahci_reset_port(AHCIState *s, int port)
     if (!ide_state->blk) {
         pr->sig = 0;
         ide_state->status = SEEK_STAT | WRERR_STAT;
-    } else if (ide_state->drive_kind == IDE_CD) {
+    } else if (ide_state->drive_kind == IDE_CD ||
+        ide_state->drive_kind == IDE_BRIDGE) {
         pr->sig = SATA_SIGNATURE_CDROM;
         ide_state->lcyl = 0x14;
         ide_state->hcyl = 0xeb;

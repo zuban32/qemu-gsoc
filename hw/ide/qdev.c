@@ -182,7 +182,7 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
     }
 
     blkconf_serial(&dev->conf, &dev->serial);
-    if (kind != IDE_CD) {
+    if (kind != IDE_CD && kind != IDE_BRIDGE) {
         blkconf_geometry(&dev->conf, &dev->chs_trans, 65536, 16, 255, &err);
         if (err) {
             error_report_err(err);
