@@ -12,6 +12,7 @@
 #include "sysemu/sysemu.h"
 #include "hw/block/block.h"
 #include "block/scsi.h"
+#include "hw/scsi/scsi.h"
 
 /* debug IDE devices */
 //#define DEBUG_IDE
@@ -317,7 +318,7 @@ typedef struct IDEDMAOps IDEDMAOps;
 #define SMART_DISABLE         0xd9
 #define SMART_STATUS          0xda
 
-typedef enum { IDE_HD, IDE_CD, IDE_CFATA } IDEDriveKind;
+typedef enum { IDE_HD, IDE_CD, IDE_CFATA, IDE_BRIDGE } IDEDriveKind;
 
 typedef void EndTransferFunc(IDEState *);
 
@@ -492,6 +493,7 @@ struct IDEDevice {
     char *serial;
     char *model;
     uint64_t wwn;
+    SCSIBus scsi_bus;
 };
 
 /* These are used for the error_status field of IDEBus */
