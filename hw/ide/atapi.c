@@ -1253,6 +1253,22 @@ void ide_atapi_cmd(IDEState *s)
         return;
     }
 
+    if (s->drive_kind == IDE_BRIDGE) {
+        IDEDevice *dev = s->bus->master;
+        SCSIDevice *scsi_dev = scsi_device_find(&dev->scsi_bus, 0, 0, 0);
+        s->scsi_req = scsi_new_request_from_bridge(scsi_dev, 0, 0, buf, NULL);
+
+        /* Necessary to prevent ide from reading while data isn't ready */
+        if (buf[0] == READ_10) {
+            s->status |= BUSY_STAT;
+        }
+
+        if (scsi_req_enqueue(s->scsi_req)) {
+            scsi_req_continue(s->scsi_req);
+        }
+        return;
+    }
+
     /* Execute the command */
     if (atapi_cmd_table[s->io_buffer[0]].handler) {
         atapi_cmd_table[s->io_buffer[0]].handler(s, buf);
