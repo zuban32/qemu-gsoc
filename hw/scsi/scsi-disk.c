@@ -2428,6 +2428,49 @@ static SCSIRequest *scsi_new_request(SCSIDevice *d, uint32_t tag, uint32_t lun,
     return req;
 }
 
+SCSIRequest *scsi_new_request_from_bridge(SCSIDevice *d, uint32_t tag,
+                                          uint32_t lun, uint8_t *buf,
+                                          void *hba_private)
+{
+    SCSIDiskState *s = DO_UPCAST(SCSIDiskState, qdev, d);
+    SCSIDeviceClass *sc = SCSI_DEVICE_GET_CLASS(d);
+    SCSIRequest *req;
+    const SCSIReqOps *ops;
+    uint8_t command;
+
+    command = buf[0];
+    ops = scsi_disk_reqops_dispatch[command];
+    if (!ops) {
+        ops = &scsi_disk_emulate_reqops;
+    }
+    req = scsi_req_alloc(ops, &s->qdev, tag, lun, hba_private);
+    memcpy(req->cmd.buf, buf, 16);
+
+    SCSICommand cmd = { .len = 0 };
+
+    if (ops != NULL || !sc->parse_cdb) {
+        scsi_req_parse_cdb(d, &cmd, buf);
+    } else {
+        sc->parse_cdb(d, &cmd, buf, hba_private);
+    }
+
+    req->cmd = cmd;
+    req->resid = req->cmd.xfer;
+
+    #ifdef DEBUG_SCSI
+    DPRINTF("Command: lun=%d tag=0x%x data=0x%02x", lun, tag, buf[0]);
+    {
+        int i;
+        for (i = 1; i < scsi_cdb_length(buf); i++) {
+            printf(" 0x%02x", buf[i]);
+        }
+        printf("\n");
+    }
+    #endif
+
+    return req;
+}
+
 #ifdef __linux__
 static int get_device_type(SCSIDiskState *s)
 {
